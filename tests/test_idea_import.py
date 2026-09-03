@@ -151,3 +151,37 @@ def test_branch_sharing_a_name_with_a_path_still_imports(vault, repo, cli):
     code, out, _ = cli("idea", "import", "--repo", "TestProj")
     assert code == 0, out
     assert "idea-testproj-0003-fresh-one.md" in _ideas(vault)
+
+
+def test_import_reports_matched_pattern_per_branch(vault, repo, cli):
+    code, out, _ = cli("idea", "import", "--repo", "TestProj")
+    assert code == 0, out
+    assert "experiments/merged-one  pattern=experiments/*" in out
+    assert "experiments/fresh-one  pattern=experiments/*" in out
+    assert "phase-1-old-one  pattern=phase-*" in out
+    assert "skip       fix/some-bug  (kind=gotcha)  pattern=fix/*" in out
+    # protected branches are never matched, so they carry no pattern
+    assert "skip       main  (protected)\n" in out
+    assert "skip       worktree-agent-7  (protected)\n" in out
+
+
+def test_dry_run_lists_fallback_branches(vault, repo, cli):
+    repo("checkout", "-q", "-b", "bare-name", "main")
+    repo.commit("bare", days_ago(2))
+    repo("checkout", "-q", "main")
+    code, out, _ = cli("idea", "import", "--repo", "TestProj", "--dry-run")
+    assert code == 0, out
+    assert "[dry-run] create     idea-testproj-0003-bare-name.md" in out
+    assert "bare-name  pattern=*" in out
+    assert '[dry-run] fallback "*" (1 branch, ' in out
+    assert out.rstrip().endswith("): bare-name")
+    # a real run still names the pattern per branch but adds no summary
+    code, out, _ = cli("idea", "import", "--repo", "TestProj")
+    assert code == 0, out
+    assert "bare-name  pattern=*" in out
+    assert 'fallback "*"' not in out
+
+
+def test_dry_run_reports_no_fallback_when_every_branch_is_namespaced(vault, repo, cli):
+    _, out, _ = cli("idea", "import", "--repo", "TestProj", "--dry-run")
+    assert out.rstrip().endswith('[dry-run] fallback "*": none')

@@ -46,12 +46,18 @@ class Config:
     def personal(self) -> Path:
         return self.roots["personal"]
 
-    def branch_kind(self, branch: str) -> str | None:
-        """First matching pattern wins; the user orders patterns most-specific first."""
+    def branch_match(self, branch: str) -> tuple[str, str] | None:
+        """(pattern, kind) of the first matching [branches] entry, else None.
+        First match wins; the user orders patterns most-specific first.
+        """
         for pattern, kind in self.branches:
             if fnmatch.fnmatchcase(branch, pattern):
-                return kind
+                return pattern, kind
         return None
+
+    def branch_kind(self, branch: str) -> str | None:
+        match = self.branch_match(branch)
+        return None if match is None else match[1]
 
     def assert_inside_roots(self, target: Path) -> None:
         """Refuse any write that would land outside the three configured roots."""

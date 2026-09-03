@@ -41,3 +41,11 @@ def test_branch_kind_first_match_wins(vault):
     assert cfg.branch_kind("experiments/x") == "idea"
     assert cfg.branch_kind("fix/x") == "gotcha"
     assert cfg.branch_kind("bare-name") == "idea"
+
+
+def test_branch_match_returns_pattern_and_kind(vault):
+    cfg = load_config(vault.config)
+    assert cfg.branch_match("experiments/x") == ("experiments/*", "idea")
+    assert cfg.branch_match("fix/x") == ("fix/*", "gotcha")
+    assert cfg.branch_match("bare-name") == ("*", "idea")
+    assert cfg.branch_kind("bare-name") == "idea"  # still delegates

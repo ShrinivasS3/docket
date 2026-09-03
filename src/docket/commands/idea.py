@@ -1,4 +1,9 @@
-"""docket idea import: one idea note per git branch, idempotent by docket_id."""
+"""docket idea import: one idea note per git branch, idempotent by docket_id.
+
+Every non-protected branch line names the [branches] pattern that classified it,
+and a dry run ends with the list of branches that reached only the "*" fallback:
+those carry no namespace meaning and may need a type assigned by hand.
+"""
 
 from __future__ import annotations
 
@@ -25,6 +30,7 @@ CATEGORY = "Ideas"
 PROTECTED = ("main", "master")
 PROTECTED_GLOBS = ("worktree-agent-*",)
 PARKED_AFTER_DAYS = 90
+FALLBACK = "*"
 
 
 def status_for(merged: bool, age_days: int) -> str:
@@ -40,13 +46,18 @@ class Plan:
     filename: str = ""
     status: str = ""
     reason: str = ""
+    pattern: str = ""  # the [branches] pattern that matched; "" when protected
 
     def line(self, dry_run: bool) -> str:
         prefix = "[dry-run] " if dry_run and self.action != "skip" else ""
         if self.action == "skip":
-            return f"skip       {self.branch}  ({self.reason})"
-        head = f"{prefix}{self.action:<9}  {self.filename}"
-        return f"{head}  [[{self.status}]]  {self.branch}"
+            head = f"skip       {self.branch}  ({self.reason})"
+        else:
+            head = (
+                f"{prefix}{self.action:<9}  {self.filename}"
+                f"  [[{self.status}]]  {self.branch}"
+            )
+        return f"{head}  pattern={self.pattern}" if self.pattern else head
 
 
 @dataclass
@@ -67,6 +78,21 @@ class ImportResult:
             f"{self.project}: {self.branches} branches -> {self.notes} notes "
             f"({self.count('create')} create, {self.count('update')} update, "
             f"{self.count('unchanged')} unchanged, {self.count('skip')} skipped)"
+        )
+
+    @property
+    def fallback(self) -> list[str]:
+        """Branches classified only by the "*" fallback: no namespace meaning."""
+        return [p.branch for p in self.plans if p.pattern == FALLBACK]
+
+    def fallback_summary(self) -> str:
+        names = self.fallback
+        if not names:
+            return 'fallback "*": none'
+        noun = "branch" if len(names) == 1 else "branches"
+        return (
+            f'fallback "*" ({len(names)} {noun}, no namespace meaning, '
+            f"may need a type by hand): {', '.join(names)}"
         )
 
 
@@ -105,18 +131,21 @@ def import_ideas(cfg: Config, repo_name: str, *, dry_run: bool = False) -> Impor
         if _is_protected(name):
             result.plans.append(Plan(name, "skip", reason="protected"))
             continue
-        kind = cfg.branch_kind(name)
-        if kind is None:
+        match = cfg.branch_match(name)
+        if match is None:
             result.plans.append(Plan(name, "skip", reason="no [branches] pattern"))
             continue
+        pattern, kind = match
         if kind != "idea":
-            result.plans.append(Plan(name, "skip", reason=f"kind={kind}"))
+            result.plans.append(
+                Plan(name, "skip", reason=f"kind={kind}", pattern=pattern)
+            )
             continue
-        candidates.append((gitinfo.commit_date(repo, ref), name))
+        candidates.append((gitinfo.commit_date(repo, ref), name, pattern))
     candidates.sort()  # oldest branch gets the lowest number on first import
 
     number = next_number(records, prefix)
-    for last_commit, name in candidates:
+    for last_commit, name, pattern in candidates:
         is_merged = name in merged
         status = status_for(is_merged, (now - last_commit).days)
         record = existing.get(name)
@@ -140,7 +169,9 @@ def import_ideas(cfg: Config, repo_name: str, *, dry_run: bool = False) -> Impor
             path = cfg.context / f"idea-{docket_id}-{slug}.md"
             text = fm.render(fields) + f"\n# {fields['title']}\n"
             write_text(cfg, path, text, dry_run=dry_run)
-            result.plans.append(Plan(name, "create", path.name, status))
+            result.plans.append(
+                Plan(name, "create", path.name, status, pattern=pattern)
+            )
             continue
 
         fm_text = record.fm_text
@@ -154,12 +185,17 @@ def import_ideas(cfg: Config, repo_name: str, *, dry_run: bool = False) -> Impor
         text = record.with_frontmatter(fm_text)
         changed = write_text(cfg, record.path, text, dry_run=dry_run)
         action = "update" if changed else "unchanged"
-        result.plans.append(Plan(name, action, record.path.name, status))
+        result.plans.append(
+            Plan(name, action, record.path.name, status, pattern=pattern)
+        )
     return result
 
 
 def run_idea_import(cfg: Config, repo_name: str, *, dry_run: bool = False) -> str:
     result = import_ideas(cfg, repo_name, dry_run=dry_run)
     lines = [plan.line(dry_run) for plan in result.plans]
-    lines.append(("[dry-run] " if dry_run else "") + result.summary())
+    prefix = "[dry-run] " if dry_run else ""
+    lines.append(prefix + result.summary())
+    if dry_run:
+        lines.append(prefix + result.fallback_summary())
     return "\n".join(lines)
