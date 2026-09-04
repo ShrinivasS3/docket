@@ -13,14 +13,6 @@ def new(cli, *args):
     return cli("idea", "new", *args)
 
 
-@pytest.fixture
-def here(repo, monkeypatch):
-    """Run from inside TestProj: `idea new` rides `git checkout -b`, so cwd is
-    what says which project without asking again."""
-    monkeypatch.chdir(repo.path)
-    return repo
-
-
 def identity(vault, *, device="Workstation", attended=True):
     vault.config.write_text(
         vault.config.read_text()

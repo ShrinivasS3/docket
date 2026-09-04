@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import fnmatch
 import os
-import platform
 import re
 import tomllib
 from dataclasses import dataclass
@@ -37,11 +36,16 @@ class RecallConfig:
 
 @dataclass(frozen=True)
 class IdentityConfig:
-    """[identity]: which machine wrote a record, and whether a human was there.
+    """[identity]: which machine role wrote a record, and whether a human was there.
 
-    No `[identity]` table means no `device` and no `attended` in the record. A
-    machine that has not been told who it is does not get to claim a device, and
-    a stamped-on default would be indistinguishable from a real answer.
+    `device` is a ROLE — mac, cnslab, hermes — never a hostname. A hostname stops
+    being comparable the moment the machine is replaced or renamed, and the
+    question a record has to answer two years later is which role wrote it, not
+    what that laptop happened to be called.
+
+    No `[identity]` table means neither field is written. A machine that has not
+    been told its role does not get to claim one, and a stamped-on default would
+    be indistinguishable from a real answer.
     """
 
     device: str = ""
@@ -50,6 +54,27 @@ class IdentityConfig:
     @property
     def present(self) -> bool:
         return bool(self.device)
+
+    def resolve(self, unattended: bool = False) -> bool:
+        """Whether a human was there this run. `--unattended` always wins: a
+        scheduled writer must be able to say so on a machine configured
+        attended, and nothing may claim attendance on its behalf."""
+        return False if unattended else self.attended
+
+    def fields(self, unattended: bool = False) -> dict:
+        """The two frontmatter fields, or nothing at all when unconfigured."""
+        if not self.present:
+            return {}
+        return {"device": self.device, "attended": self.resolve(unattended)}
+
+    def trailers(self, unattended: bool = False) -> str:
+        """Git commit trailers. Trailers, not author identity: authorship stays
+        the user's, while `git log --grep="Attended: false"` still finds every
+        commit no human stood behind."""
+        return (
+            f"Device: {self.device}\n"
+            f"Attended: {'true' if self.resolve(unattended) else 'false'}"
+        )
 
 
 @dataclass(frozen=True)
@@ -142,12 +167,21 @@ def load_config(explicit: str | Path | None = None) -> Config:
 
 
 def _identity_config(raw: dict | None) -> IdentityConfig:
-    """Absent table -> an empty identity, which writes no fields at all."""
+    """Absent table -> an empty identity, which writes no fields at all.
+
+    `device` is required when the table exists: there is no sensible default.
+    Falling back to the hostname would silently reintroduce exactly the value
+    the role is there to replace.
+    """
     if not raw:
         return IdentityConfig()
-    device = raw.get("device", platform.node().split(".")[0])
+    device = raw.get("device")
     if not isinstance(device, str) or not device.strip():
-        raise DocketError("config [identity] device must be a non-empty string")
+        raise DocketError(
+            "config [identity] device must be a non-empty role string — "
+            "mac, cnslab, hermes. A role, never a hostname: a hostname stops "
+            "being comparable the moment the machine is replaced."
+        )
     attended = raw.get("attended", True)
     if not isinstance(attended, bool):
         raise DocketError("config [identity] attended must be true or false")

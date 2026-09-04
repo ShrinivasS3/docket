@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from docket import frontmatter as fm
 from docket.config import Config
-from docket.notes import is_stub, load_records
+from docket.notes import is_stub, load_records, matches_attended
 
 COLUMNS = ("docket_id", "category", "project", "status", "title")
 
@@ -20,6 +20,7 @@ def run_list(
     status: str | None = None,
     project: str | None = None,
     stubs: bool = False,
+    attended: bool | None = None,
 ) -> str:
     records, _ = load_records(cfg.context)
     rows = []
@@ -27,6 +28,8 @@ def run_list(
         if record.docket_id is None:
             continue
         if stubs and not is_stub(record):
+            continue
+        if not matches_attended(record, attended):
             continue
         if category and _norm(record.category) != _norm(category):
             continue

@@ -35,6 +35,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--scope", required=True, help="comma-separated scope tags")
     p.add_argument("--project", required=True, help="project anchor name")
     p.add_argument("--note", help="free-text context appended as a body section")
+    p.add_argument(
+        "--unattended",
+        action="store_true",
+        help="record attended: false — for scheduled and autonomous writers",
+    )
     p.add_argument("--dry-run", action="store_true")
 
     p = sub.add_parser(
@@ -43,12 +48,24 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("query", nargs="?", help="words that must all appear")
     p.add_argument("--full", metavar="ID", help="print one whole context record")
     p.add_argument("--all", action="store_true", help="bypass the output line cap")
+    g = p.add_mutually_exclusive_group()
+    g.add_argument("--attended", action="store_true", help="only records a human wrote")
+    g.add_argument(
+        "--unattended",
+        action="store_true",
+        help="only records written by a scheduled or autonomous process",
+    )
 
     p = sub.add_parser("idea", help="idea notes")
     idea_sub = p.add_subparsers(dest="idea_command", required=True)
     q = idea_sub.add_parser("import", help="one idea note per git branch")
     q.add_argument(
         "--repo", required=True, help="directory name under the projects root"
+    )
+    q.add_argument(
+        "--unattended",
+        action="store_true",
+        help="record attended: false — for scheduled and autonomous writers",
     )
     q.add_argument("--dry-run", action="store_true")
 
@@ -68,6 +85,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="promote this line of the Dashboard.md scratch block",
     )
     q.add_argument("--kind", choices=KIND_CHOICES)
+    q.add_argument(
+        "--unattended",
+        action="store_true",
+        help="record attended: false — for scheduled and autonomous writers",
+    )
     q.add_argument("--dry-run", action="store_true")
 
     p = sub.add_parser("dash", help="regenerate the focus block in Dashboard.md")
@@ -85,6 +107,13 @@ def build_parser() -> argparse.ArgumentParser:
             "only records docket check warns about: unjudged (Completed, verdict "
             "pending) or no gate (In Progress); kind: scaffold is excluded"
         ),
+    )
+    g = p.add_mutually_exclusive_group()
+    g.add_argument("--attended", action="store_true", help="only records a human wrote")
+    g.add_argument(
+        "--unattended",
+        action="store_true",
+        help="only records written by a scheduled or autonomous process",
     )
 
     sub.add_parser("check", help="validate the context vault (exit 1 on problems)")
@@ -107,9 +136,25 @@ def build_parser() -> argparse.ArgumentParser:
         "incomplete",
     )
 
+    p = sub.add_parser(
+        "identity", help="print the Device/Attended commit trailers for this machine"
+    )
+    p.add_argument(
+        "--unattended",
+        action="store_true",
+        help="record attended: false — for scheduled and autonomous writers",
+    )
+
     p = sub.add_parser("brief", help="~200-token digest of one project, from files")
     p.add_argument("project", help="repo directory name under the projects root")
     return parser
+
+
+def _attended(args: argparse.Namespace) -> bool | None:
+    """The --attended/--unattended filter as a tri-state; None means no filter."""
+    if getattr(args, "attended", False):
+        return True
+    return False if getattr(args, "unattended", False) else None
 
 
 def dispatch(args: argparse.Namespace) -> int:
@@ -131,6 +176,7 @@ def dispatch(args: argparse.Namespace) -> int:
                 scope=args.scope,
                 project=args.project,
                 note=args.note,
+                unattended=args.unattended,
                 dry_run=args.dry_run,
             )
         )
@@ -138,7 +184,15 @@ def dispatch(args: argparse.Namespace) -> int:
     if args.command == "recall":
         from docket.commands.recall import run_recall
 
-        print(run_recall(cfg, args.query, full=args.full, show_all=args.all))
+        print(
+            run_recall(
+                cfg,
+                args.query,
+                full=args.full,
+                show_all=args.all,
+                attended=_attended(args),
+            )
+        )
         return 0
     if args.command == "idea":
         if args.idea_command == "new":
@@ -154,13 +208,18 @@ def dispatch(args: argparse.Namespace) -> int:
                     inherits=args.inherits,
                     from_scratch=args.from_scratch,
                     kind=args.kind,
+                    unattended=args.unattended,
                     dry_run=args.dry_run,
                 )
             )
             return 0
         from docket.commands.idea import run_idea_import
 
-        print(run_idea_import(cfg, args.repo, dry_run=args.dry_run))
+        print(
+            run_idea_import(
+                cfg, args.repo, unattended=args.unattended, dry_run=args.dry_run
+            )
+        )
         return 0
     if args.command == "dash":
         from docket.commands.dash import run_dash
@@ -177,8 +236,14 @@ def dispatch(args: argparse.Namespace) -> int:
                 status=args.status,
                 project=args.project,
                 stubs=args.stubs,
+                attended=_attended(args),
             )
         )
+        return 0
+    if args.command == "identity":
+        from docket.commands.identity import run_identity
+
+        print(run_identity(cfg, unattended=args.unattended))
         return 0
     if args.command == "brief":
         from docket.commands.brief import run_brief
