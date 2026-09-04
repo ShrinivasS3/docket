@@ -6,8 +6,11 @@ least one query term is a hit, scored by how many distinct terms it contains,
 and hits are sorted by score descending, so a note matching one of two terms
 still appears, below one matching both. Stop words and one-character tokens
 are ignored. `[recall.aliases]` in config.toml (short = "phrase") expands
-both ways on the note side: a note saying "sr" counts as saying "successor
-representation", and one saying the phrase counts as saying "sr".
+both ways, on context records only: a record saying "sr" counts as saying
+"successor representation" and vice versa. Records are terse and derive
+from branch slugs, so they need it; personal notes are prose that spells
+things out, so they match on literal stems, where expansion would only cost
+precision.
 
 Context records are reported by frontmatter only: id, status, title, scope,
 path. The body is never printed; `--full <id>` prints one whole record.
@@ -219,7 +222,7 @@ def find_hits(cfg: Config, terms: list[str]) -> list[Hit]:
     personal = cfg.roots.get("personal")
     if personal is not None and personal.is_dir():
         for path in iter_markdown(personal):
-            hit = _personal_hit(path, personal, terms, aliases)
+            hit = _personal_hit(path, personal, terms, [])  # literal stems only
             if hit is not None:
                 hits.append(hit)
     hits.sort(key=lambda h: (-h.score, h.root, h.key))

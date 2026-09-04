@@ -266,11 +266,11 @@ def test_recall_alias_expands_both_ways(vault, cli):
         "[context] testproj-0035 · Ideas · TestProj · status: Completed · matched 2/2"
         in out
     )
-    assert "[personal] Notes SR.md:2 · matched 2/2" in out
-    assert "  > The SR map predicts occupancy." in out
+    assert "Notes SR.md" not in out  # personal notes match literal stems only
+    assert "[personal] Long form.md:1 · matched 2/2" in out
     code, out, _ = cli("recall", "sr")
     assert code == 0 and "testproj-0035" in out
-    assert "[personal] Long form.md:1" in out and "Notes SR.md:2" in out
+    assert "[personal] Notes SR.md:2" in out and "Long form.md" not in out
 
 
 def test_recall_without_alias_config_does_not_expand(vault, cli):
