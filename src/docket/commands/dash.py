@@ -39,7 +39,7 @@ def load_deadlines(cfg: Config) -> list[dict]:
 DEADLINE_STATUSES = ("pending", "done", "slipped", "cancelled")
 
 
-def _deadline_status(entry: dict, venue: str) -> str:
+def deadline_status(entry: dict, venue: str) -> str:
     raw = entry.get("status")
     status = "pending" if raw is None else str(raw).strip().lower()
     if status not in DEADLINE_STATUSES:
@@ -61,7 +61,7 @@ def _deadline_lines(entries: list[dict], now: dt.date) -> list[str]:
     dated, undated = [], []
     for entry in entries:
         venue = str(entry.get("venue") or entry.get("name") or "?")
-        if _deadline_status(entry, venue) != "pending":
+        if deadline_status(entry, venue) != "pending":
             continue
         projects = entry.get("for") or []
         if not isinstance(projects, list):

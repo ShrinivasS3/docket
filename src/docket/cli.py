@@ -63,6 +63,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     sub.add_parser("check", help="validate the context vault (exit 1 on problems)")
+
+    p = sub.add_parser("brief", help="~200-token digest of one project, from files")
+    p.add_argument("project", help="repo directory name under the projects root")
     return parser
 
 
@@ -116,6 +119,11 @@ def dispatch(args: argparse.Namespace) -> int:
                 stubs=args.stubs,
             )
         )
+        return 0
+    if args.command == "brief":
+        from docket.commands.brief import run_brief
+
+        print(run_brief(cfg, args.project))
         return 0
     if args.command == "check":
         from docket.commands.check import run_check

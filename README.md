@@ -11,8 +11,16 @@ Every write is idempotent, confined to the three configured roots, and never
 touches file content outside `<!-- docket:begin X -->` / `<!-- docket:end X -->`
 markers.
 
-Commands in v0: `capture`, `gotcha`, `recall`, `idea import`, `dash`, `list`,
-`check`.
+Commands in v0: `capture`, `gotcha`, `recall`, `brief`, `idea import`, `dash`,
+`list`, `check`.
+
+`docket brief <project>` prints a ~200-token digest of one repo, assembled
+from files only: the first paragraph of `NORTH_STAR.md`, branch and unpushed
+count, the active idea and its gate, the last three ledger rows from
+`experiments/RESULTS.tsv`, falsified ideas, overlapping gotchas, and the
+nearest deadline naming the project. Fields degrade one by one when a file
+is missing, output is fitted to about 250 tokens, and nothing is written.
+It is meant for a Claude Code `SessionStart` hook: `docket brief $(basename $PWD)`.
 
 `docket recall "<words>"` searches the context vault and, read-only, the
 personal vault. Terms are stemmed (aggregation matches aggregate) and every
@@ -26,8 +34,9 @@ full; more print one compact line each. Output is bounded at 60 rendered
 lines, and any cut tier ends with a "N ..., showing M" line; `--all` lifts
 both caps. `docket recall --full <id>` prints one record. `[recall.aliases]`
 in config.toml maps a short form to its phrase (`sr = "successor
-representation"`) and recall expands both ways, so either spelling finds
-notes that use the other.
+representation"`) and recall expands both ways on context records, so
+either spelling finds a record that uses the other; personal notes match on
+literal stems.
 
 `docket check` warns `<n> records are import stubs — title only, no gate`
 (never a FAIL: stubs are legitimate); `docket list --stubs` prints them.
