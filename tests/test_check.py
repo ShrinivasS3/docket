@@ -253,27 +253,26 @@ def test_parked_and_hand_set_statuses_are_in_neither_class(vault, cli):
     assert code == 0 and out == "docket check: ok (2 records)\n"
 
 
-def test_completed_records_in_dirty_repo_are_warned(vault, repo, cli):
+def test_completed_record_with_its_branch_checked_out_dirty_is_warned(vault, repo, cli):
     cli("idea", "import", "--repo", "TestProj")  # 0002 Completed (merged-one)
-    code, out, _ = cli("check")
-    assert code == 0 and "uncommitted;" not in out  # clean tree: nothing to say
     (repo.path / "scratch.txt").write_text("not committed")
+    code, out, _ = cli("check")
+    assert code == 0 and "uncommitted" not in out  # main belongs to no record
+    repo("checkout", "-q", "experiments/merged-one")
     code, out, _ = cli("check")
     assert code == 0
     assert (
-        "WARN  TestProj — 1 Completed record while 1 path uncommitted; "
-        "checked-out branch main belongs to no record" in out
+        "WARN  TestProj — testproj-0002 is Completed but its branch "
+        "experiments/merged-one is checked out with 1 path uncommitted" in out
     )
-    repo("checkout", "-q", "experiments/merged-one")
+    (repo.path / "scratch.txt").unlink()
     code, out, _ = cli("check")
-    assert (
-        "WARN  TestProj — 1 Completed record while 1 path uncommitted; "
-        "checked-out branch experiments/merged-one belongs to testproj-0002" in out
-    )
+    assert code == 0 and "uncommitted" not in out  # clean tree: nothing to say
+    (repo.path / "scratch.txt").write_text("not committed")
     # A scaffold record is not missed research work.
     path = vault.context / "idea-testproj-0002-merged-one.md"
     path.write_text(
         path.read_text().replace("verdict: pending", "verdict: pending\nkind: scaffold")
     )
     code, out, _ = cli("check")
-    assert code == 0 and "uncommitted;" not in out
+    assert code == 0 and "uncommitted" not in out

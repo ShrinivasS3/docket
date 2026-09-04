@@ -93,44 +93,43 @@ def _plural(count: int, noun: str) -> str:
 
 
 def uncommitted_work_warnings(cfg: Config) -> list[str]:
-    """Completed records in a repo that has uncommitted paths. `idea import` marks
-    a record Completed when its branch tip is contained in main, which is also
-    what a branch that never received a commit looks like: the record's actual
-    work may be sitting uncommitted in the tree. One WARN per repo, naming the
-    record whose branch is checked out (the one the uncommitted paths most
-    plausibly belong to). Scaffold records are skipped. Never a FAIL.
+    """A Completed record whose branch is checked out in a repo with uncommitted
+    paths. `idea import` marks a record Completed when its branch tip is
+    contained in main, which is also what a branch that never received a commit
+    looks like: the record's actual work may be sitting uncommitted in the tree.
+    Repo-wide dirt says nothing about a record whose branch is not checked out,
+    so only the checked-out branch's record can fire. Scaffold records are
+    skipped. Never a FAIL.
     """
     records, _ = load_records(cfg.context)
     lines = []
     for repo in resolve_repos(cfg):
         if not repo.has_git:
             continue
+        head = gitinfo.current_branch(repo.path)
+        if head is None:
+            continue
         pid = project_id(repo.path)
-        completed = [
-            r
-            for r in records
-            if r.status == "Completed"
-            and r.project == pid
-            and r.docket_id
-            and not is_scaffold(r)
-        ]
-        if not completed:
+        owner = next(
+            (
+                r
+                for r in records
+                if r.status == "Completed"
+                and r.project == pid
+                and r.docket_id
+                and not is_scaffold(r)
+                and fm.get_field(r.fields, "branch") == head
+            ),
+            None,
+        )
+        if owner is None:
             continue
         paths = gitinfo.dirty_paths(repo.path)
         if not paths:
             continue
-        head = gitinfo.current_branch(repo.path)
-        owner = next(
-            (r for r in completed if fm.get_field(r.fields, "branch") == head), None
-        )
-        where = (
-            f"checked-out branch {head} belongs to {owner.docket_id}"
-            if owner is not None
-            else f"checked-out branch {head or '(detached)'} belongs to no record"
-        )
         lines.append(
-            f"{repo.name} — {_plural(len(completed), 'Completed record')} while "
-            f"{_plural(len(paths), 'path')} uncommitted; {where}"
+            f"{repo.name} — {owner.docket_id} is Completed but its branch {head} "
+            f"is checked out with {_plural(len(paths), 'path')} uncommitted"
         )
     return lines
 

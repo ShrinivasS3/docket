@@ -45,11 +45,12 @@ empty` (nothing says what would falsify it). A record with `kind: scaffold`
 in its frontmatter (phase, infra, repo-reset, env-setup work that lands code
 but tests nothing) is in neither class. Parked and hand-set statuses are in
 neither class either. `docket list --stubs` prints the two warned classes.
-A third WARN, `<repo> — <n> Completed records while <m> paths uncommitted;
-checked-out branch <b> belongs to <id>`, flags the case where `idea import`
-marked a branch Completed because its tip sits inside main, which is also what
-a branch that never received a commit looks like: the work may be sitting
-uncommitted in the tree. One line per repo, never a FAIL.
+A third WARN, `<repo> — <id> is Completed but its branch <b> is checked out
+with <n> paths uncommitted`, flags the case where `idea import` marked a
+branch Completed because its tip sits inside main, which is also what a branch
+that never received a commit looks like: the work may be sitting uncommitted
+in the tree. Only the checked-out branch's record can fire, since repo-wide
+dirt says nothing about a record whose branch is not checked out. Never a FAIL.
 
 ## Blocking callout
 
