@@ -119,7 +119,9 @@ def _existing_by_branch(records: list[Record], pid: str) -> dict[str, Record]:
     return found
 
 
-def import_ideas(cfg: Config, repo_name: str, *, dry_run: bool = False) -> ImportResult:
+def import_ideas(
+    cfg: Config, repo_name: str, *, unattended: bool = False, dry_run: bool = False
+) -> ImportResult:
     repo = resolve_repo(cfg, repo_name)
     if not gitinfo.has_git(repo):
         raise DocketError(f"{repo} is not a git repository")
@@ -173,6 +175,7 @@ def import_ideas(cfg: Config, repo_name: str, *, dry_run: bool = False) -> Impor
                 "merged": is_merged,
                 "gate": "",
                 "verdict": "pending",
+                **cfg.identity.fields(unattended),
             }
             path = cfg.context / f"idea-{docket_id}-{slug}.md"
             text = fm.render(fields) + f"\n# {fields['title']}\n"
@@ -199,8 +202,10 @@ def import_ideas(cfg: Config, repo_name: str, *, dry_run: bool = False) -> Impor
     return result
 
 
-def run_idea_import(cfg: Config, repo_name: str, *, dry_run: bool = False) -> str:
-    result = import_ideas(cfg, repo_name, dry_run=dry_run)
+def run_idea_import(
+    cfg: Config, repo_name: str, *, unattended: bool = False, dry_run: bool = False
+) -> str:
+    result = import_ideas(cfg, repo_name, unattended=unattended, dry_run=dry_run)
     lines = [plan.line(dry_run) for plan in result.plans]
     prefix = "[dry-run] " if dry_run else ""
     lines.append(prefix + result.summary())
@@ -477,12 +482,6 @@ def _has_gate(record: Record | None) -> bool:
     return bool(fm.get_field(record.fields, "gate") or record.fields.get("gate_date"))
 
 
-def _identity_fields(cfg: Config) -> dict:
-    if not cfg.identity.present:
-        return {}
-    return {"device": cfg.identity.device, "attended": cfg.identity.attended}
-
-
 def new_idea(
     cfg: Config,
     *,
@@ -493,6 +492,7 @@ def new_idea(
     inherits: str | None = None,
     from_scratch: str | None = None,
     kind: str | None = None,
+    unattended: bool = False,
     cwd: Path | None = None,
     dry_run: bool = False,
 ) -> NewPlan:
@@ -551,6 +551,7 @@ def new_idea(
             inherit_ids=inherit_ids,
             kind=kind,
             scratch=scratch,
+            unattended=unattended,
             records=records,
             now=now,
             dry_run=dry_run,
@@ -567,6 +568,7 @@ def new_idea(
             inherit_ids=inherit_ids,
             kind=kind,
             scratch=scratch,
+            unattended=unattended,
             dry_run=dry_run,
         )
     plan.notes = notes
@@ -601,6 +603,7 @@ def _create(
     inherit_ids: list[str],
     kind: str | None,
     scratch: Scratch | None,
+    unattended: bool,
     records: list[Record],
     now: dt.date,
     dry_run: bool,
@@ -631,7 +634,7 @@ def _create(
         fields["parent"] = parent
     if inherit_ids:
         fields["inherits"] = inherit_ids
-    fields.update(_identity_fields(cfg))
+    fields.update(cfg.identity.fields(unattended))
 
     body = [f"# {title}"]
     if scratch is not None:
@@ -654,6 +657,7 @@ def _update(
     inherit_ids: list[str],
     kind: str | None,
     scratch: Scratch | None,
+    unattended: bool,
     dry_run: bool,
 ) -> NewPlan:
     """Re-run against an existing record: only what was supplied this run moves.
@@ -671,7 +675,7 @@ def _update(
         fm_text = fm.set_field(fm_text, "parent", parent)
     if inherit_ids:
         fm_text = fm.set_field(fm_text, "inherits", inherit_ids)
-    for key, value in _identity_fields(cfg).items():
+    for key, value in cfg.identity.fields(unattended).items():
         if key not in record.fields:  # the device that wrote it keeps the credit
             fm_text = fm.set_field(fm_text, key, value)
 

@@ -184,6 +184,14 @@ def repo(vault: SimpleNamespace) -> Git:
 
 
 @pytest.fixture
+def here(repo: Git, monkeypatch: pytest.MonkeyPatch) -> Git:
+    """Run from inside TestProj. `docket idea new` rides `git checkout -b`, so
+    cwd is what says which project without asking again."""
+    monkeypatch.chdir(repo.path)
+    return repo
+
+
+@pytest.fixture
 def cli(capsys: pytest.CaptureFixture[str]):
     """Run the CLI in-process: returns (exit_code, stdout, stderr)."""
 

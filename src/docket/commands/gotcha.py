@@ -43,6 +43,7 @@ def run_gotcha(
     scope: str,
     project: str,
     note: str | None = None,
+    unattended: bool = False,
     dry_run: bool = False,
 ) -> str:
     symptom, cause, fix = (" ".join(s.split()) for s in (symptom, cause, fix))
@@ -83,6 +84,7 @@ def run_gotcha(
         "fix": fix,
         "scope": scope_list,
         "created": today(),
+        **cfg.identity.fields(unattended),
     }
     path = vault / f"gotcha-{docket_id}-{slugify(symptom, 50)}.md"
     prefix = "[dry-run] " if dry_run else ""

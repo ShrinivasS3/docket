@@ -158,6 +158,20 @@ def has_no_gate(record: Record) -> bool:
     )
 
 
+def attended_flag(record: Record) -> bool | None:
+    """The record's `attended` field, or None when it has none. Unknown is not
+    the same as unattended: a record written before the field existed says
+    nothing either way, and belongs in neither filter."""
+    value = record.fields.get("attended")
+    return value if isinstance(value, bool) else None
+
+
+def matches_attended(record: Record, want: bool | None) -> bool:
+    """`want` None means no filter. Records with no `attended` field never
+    match a filter, in either direction."""
+    return want is None or attended_flag(record) is want
+
+
 def is_stub(record: Record) -> bool:
     """A record `docket check` warns about: unjudged or gate-less. Scaffold
     records are neither. Parked, Falsified and other hand-set statuses are

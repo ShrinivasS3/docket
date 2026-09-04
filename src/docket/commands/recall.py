@@ -37,9 +37,16 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from docket.config import Config, DocketError
-from docket.notes import Record, iter_markdown, load_records
+from docket.notes import (
+    Record,
+    attended_flag,
+    iter_markdown,
+    load_records,
+    matches_attended,
+)
 from docket.stem import stem
 
+UNATTENDED = "UNATTENDED"  # caps, so it survives a dot-separated lowercase line
 CAP = 60  # rendered lines; room for two tiers of five full-format hits
 PERSONAL_CAP = 5
 FULL_FORMAT_MAX_HITS = 5
@@ -83,6 +90,7 @@ class Hit:
     score: int
     compact: str
     full: tuple[str, ...]
+    unattended: bool = False  # written by a process with no human behind it
 
 
 def _tokens(text: str) -> list[str]:
@@ -154,15 +162,25 @@ def _record_hit(
     if not isinstance(scope, list):
         scope = [scope]
     parts = [f"[context] {ident}", record.category, record.project, f"status: {status}"]
+    if attended_flag(record) is False:
+        parts.append(UNATTENDED)
     full = [" · ".join(p for p in parts if p) + tag, "  " + _clip(record.title)]
     if scope:
         full.append("  scope: " + ", ".join(str(s) for s in scope))
     full.append("  " + record.path.relative_to(root).as_posix())
+    mark = f" · {UNATTENDED}" if attended_flag(record) is False else ""
     compact = (
-        f"[context] {ident} · status: {status} · "
+        f"[context] {ident} · status: {status}{mark} · "
         f"{_clip(record.title, COMPACT_WIDTH)}{tag}"
     )
-    return Hit("context", ident.lower(), score, compact, tuple(full))
+    return Hit(
+        "context",
+        ident.lower(),
+        score,
+        compact,
+        tuple(full),
+        unattended=attended_flag(record) is False,
+    )
 
 
 def _best_line(terms: list[str], lines: list[str], aliases: list[Alias]) -> int | None:
@@ -211,16 +229,21 @@ def _full_record(cfg: Config, docket_id: str) -> str:
     raise DocketError(f"no context record with docket_id {docket_id}")
 
 
-def find_hits(cfg: Config, terms: list[str]) -> list[Hit]:
+def find_hits(cfg: Config, terms: list[str], attended: bool | None = None) -> list[Hit]:
     aliases = _aliases(cfg)
     hits: list[Hit] = []
     records, _ = load_records(cfg.context)
     for record in records:
+        if not matches_attended(record, attended):
+            continue
         hit = _record_hit(record, cfg.context, terms, aliases)
         if hit is not None:
             hits.append(hit)
     personal = cfg.roots.get("personal")
-    if personal is not None and personal.is_dir():
+    # An attendance filter is a question only a docket record can answer, so the
+    # personal tier drops out entirely rather than returning notes the filter
+    # never actually tested.
+    if attended is None and personal is not None and personal.is_dir():
         for path in iter_markdown(personal):
             hit = _personal_hit(path, personal, terms, [])  # literal stems only
             if hit is not None:
@@ -235,6 +258,7 @@ def run_recall(
     *,
     full: str | None = None,
     show_all: bool = False,
+    attended: bool | None = None,
     cap: int = CAP,
 ) -> str:
     if full:
@@ -242,14 +266,20 @@ def run_recall(
     if not query or not query.strip():
         raise DocketError("recall needs a query, or --full <id>")
     terms = query_terms(query)
-    hits = find_hits(cfg, terms)
+    hits = find_hits(cfg, terms, attended)
+    scope = ""
+    if attended is not None:
+        scope = (
+            f" [{'attended' if attended else UNATTENDED} records only; "
+            "personal notes not searched]"
+        )
     if not hits:
-        return f'no hits for "{query}"'
+        return f'no hits for "{query}"{scope}'
     context = [hit for hit in hits if hit.root == "context"]
     personal = [hit for hit in hits if hit.root == "personal"]
     lines = [
         f'{len(hits)} hit(s) for "{query}": {len(context)} context record(s), '
-        f"{len(personal)} personal note(s)"
+        f"{len(personal)} personal note(s){scope}"
     ]
     tiers = (
         (context, "context records", None),
@@ -275,4 +305,12 @@ def run_recall(
                 f"{len(tier_hits)} {noun}, showing {shown} — refine the query "
                 "or use --all"
             )
+    marked = sum(1 for hit in hits if hit.unattended)
+    if marked:
+        noun = "record" if marked == 1 else "records"
+        lines.append(
+            f"note: {marked} {noun} marked {UNATTENDED} — written by a "
+            "scheduled or autonomous process. No human read the work behind "
+            "them, so treat them as unreviewed."
+        )
     return "\n".join(lines)

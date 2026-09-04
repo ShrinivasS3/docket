@@ -12,7 +12,7 @@ touches file content outside `<!-- docket:begin X -->` / `<!-- docket:end X -->`
 markers.
 
 Commands in v0: `init`, `capture`, `gotcha`, `recall`, `brief`, `idea new`,
-`idea import`, `dash`, `list`, `check`.
+`idea import`, `dash`, `list`, `check`, `identity`.
 
 ## docket init
 
@@ -180,22 +180,94 @@ gate_date: 2026-09-30
 verdict: pending
 parent: pathjepa-0034
 inherits: [G0004]
-device: Workstation
+device: mac
 attended: true
 ```
 
-`device` and `attended` come from `[identity]` in `config.toml`, and record which
-machine wrote the note and whether a human was at the keyboard:
+`device` and `attended` come from `[identity]` — see below.
+
+
+## Identity, attendance and commit trailers
 
 ```toml
 [identity]
-device   = "Workstation"
+device   = "mac"      # a role: mac, cnslab, hermes
 attended = true
 ```
 
-No `[identity]` table means neither field is written. A machine that has not been
-told who it is does not get to claim a device, and a stamped-on default would be
-indistinguishable from a real answer.
+**`device` is a role, never a hostname.** A hostname stops being comparable the
+moment the machine is replaced or renamed, and the question a record has to
+answer two years later is which role wrote it — not what that laptop happened
+to be called. `device` is required when the table exists; there is no default,
+because falling back to the hostname would silently reintroduce the exact value
+the role replaces. No `[identity]` table at all means neither field is written:
+a machine that has not been told its role does not get to claim one.
+
+`attended` says whether a human was at the keyboard. **`--unattended` writes
+`attended: false`** and is accepted by every command that authors a record —
+`gotcha`, `idea new`, `idea import` — and by `identity`. It always overrides
+the config, so a scheduled writer can say so on a machine configured
+`attended = true`, and nothing can claim attendance on a sweep's behalf. A
+machine that is only ever driven by a scheduler sets `attended = false` as its
+default instead. Until something could write `false`, the field carried no
+information.
+
+### Reading it back
+
+`docket recall` and `docket list` take `--attended` / `--unattended`. **`recall`
+marks unattended hits `UNATTENDED` in the hit line and adds a closing note**, so
+an agent reading a result cannot miss that no human ever checked the work:
+
+```
+[context] demoproj-0001 · Ideas · DemoProj · status: In Progress · UNATTENDED
+  Nightly sweep readout
+note: 1 record marked UNATTENDED — written by a scheduled or autonomous
+process. No human read the work behind them, so treat them as unreviewed.
+```
+
+An attendance filter drops the personal-vault tier entirely rather than
+returning notes the filter never tested — attendance is a question only a
+docket record can answer. A record written before the field existed carries no
+`attended` at all, and matches neither filter: unknown is not the same as
+unattended.
+
+### Commit trailers
+
+```
+docket identity [--unattended]
+```
+
+prints the two trailers and nothing else:
+
+```
+Device: mac
+Attended: false
+```
+
+docket does not commit; its two launchd agents do, and they pass `--unattended`
+because launchd ran them and no human read the change. **Trailers, not
+`user.name`** — authorship on GitHub stays the user's, while
+
+```
+git log --grep="Attended: false"
+```
+
+finds every commit no human stood behind. Pass them as the *last* `-m`: git
+reads trailers only from the final paragraph, so a prose paragraph after them
+silently invalidates the block. In a shell script build the arguments as an
+array —
+
+```bash
+trailers=$(docket identity --unattended 2>/dev/null) || trailers=""
+msg=(-m "log: auto $ts")
+[ -n "$trailers" ] && msg+=(-m "$trailers")
+git -C "$VAULT" commit -q "${msg[@]}"
+```
+
+— because `${trailers:+-m "$trailers"}` splits on the newline between the two
+trailers and git then refuses the block. A failed or missing `docket` must
+never stop the vault being committed, which is what the `|| trailers=""` is
+for.
 
 
 ## Blocking callout
