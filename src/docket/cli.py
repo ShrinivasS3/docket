@@ -67,6 +67,24 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("check", help="validate the context vault (exit 1 on problems)")
 
+    p = sub.add_parser("init", help="wire a repo into docket; --check only reports")
+    p.add_argument(
+        "repo",
+        nargs="?",
+        help="directory under the projects root (default: the current directory; "
+        "with --check and no repo, every registered repo)",
+    )
+    p.add_argument(
+        "--namespace", help='branch pattern for [branches], e.g. "experiments/*"'
+    )
+    p.add_argument("--project-id", help="project_id for .docket.toml and the anchor")
+    p.add_argument(
+        "--check",
+        action="store_true",
+        help="report what is missing and write nothing; exit 1 if any repo is "
+        "incomplete",
+    )
+
     p = sub.add_parser("brief", help="~200-token digest of one project, from files")
     p.add_argument("project", help="repo directory name under the projects root")
     return parser
@@ -128,6 +146,18 @@ def dispatch(args: argparse.Namespace) -> int:
 
         print(run_brief(cfg, args.project))
         return 0
+    if args.command == "init":
+        from docket.commands.init import run_init
+
+        text, code = run_init(
+            cfg,
+            args.repo,
+            check=args.check,
+            namespace=args.namespace,
+            project_id_override=args.project_id,
+        )
+        print(text)
+        return code
     if args.command == "check":
         from docket.commands.check import run_check
 

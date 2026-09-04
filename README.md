@@ -11,8 +11,42 @@ Every write is idempotent, confined to the three configured roots, and never
 touches file content outside `<!-- docket:begin X -->` / `<!-- docket:end X -->`
 markers.
 
-Commands in v0: `capture`, `gotcha`, `recall`, `brief`, `idea import`, `dash`,
-`list`, `check`.
+Commands in v0: `init`, `capture`, `gotcha`, `recall`, `brief`, `idea import`,
+`dash`, `list`, `check`.
+
+## docket init
+
+    docket init [--namespace <pattern>] [--project-id <id>] [<repo>]
+    docket init --check [<repo>]
+
+`init` wires one repo into docket. Every step is skipped when it is already
+correct, so running it on a hand-wired repo is a no-op rather than a rewrite:
+
+1. a git repo, a `.gitignore`, the 50 MB `.githooks/pre-commit` guard and
+   `core.hooksPath`, and a private remote if there is none
+2. the five largest files a push would carry, reported **before** any push.
+   A file over 50 MB refuses the remote: GitHub blocks 100 MB outright and the
+   fix afterwards is history surgery. This caught a 1.49 GiB `suite_report.html`
+   once, and a 1.5 GiB `data/raw/Data.zip` since
+3. `.docket.toml` carrying `project_id`
+4. the research-log stanza in `AGENTS.md`, **appended**, never replacing what is
+   there. The stanza is a template inside the package, so editing it once
+   propagates to every repo wired afterwards
+5. `CLAUDE.md`: absent becomes a symlink to `AGENTS.md`; a real file gets
+   `@AGENTS.md` prepended; one that already imports is left alone
+6. the `SessionStart` `docket brief` hook, merged into `.claude/settings.json`
+   rather than overwriting it
+7. the zero-byte type anchor in the context vault
+8. `--namespace` adds a branch pattern to the global `[branches]` table,
+   inserted before the `"*"` fallback so specific patterns still win
+9. a verification pass: `docket brief` emits, `docket check` passes
+
+`docket init --check [<repo>]` reports only. It writes nothing — no file, no git
+mutation, no config edit — and prints one line per repo naming what is missing,
+exiting 1 if any repo is incomplete, so it can go in a hook. With no repo
+argument it checks every registered repo. Branches that reach only the `"*"`
+fallback are reported as a note rather than a gap, since a fallback branch is
+drift in the namespace rather than missing wiring.
 
 `docket brief <project>` prints a ~200-token digest of one repo, assembled
 from files only: the first paragraph of `NORTH_STAR.md`, branch and unpushed

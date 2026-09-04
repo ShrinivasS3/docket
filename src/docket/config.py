@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fnmatch
 import os
+import re
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -147,3 +148,71 @@ def _dash_config(raw: dict) -> DashConfig:
             raise DocketError(f"config [dash] {key} must be a non-negative integer")
         values[key] = value
     return DashConfig(**values)
+
+
+BRANCH_FALLBACK = "*"
+_TABLE = re.compile(r"^\s*\[")
+_ENTRY = re.compile(r'^\s*(?:"([^"]*)"|([A-Za-z0-9_.*/\[\]-]+))\s*=')
+
+
+def _entry_key(line: str) -> str | None:
+    """The key a [branches] entry line defines, quoted or bare, else None."""
+    match = _ENTRY.match(line)
+    if match is None:
+        return None
+    return match.group(1) if match.group(1) is not None else match.group(2)
+
+
+def _strip_trailing_blank(lines: list[str]) -> list[str]:
+    end = len(lines)
+    while end and not lines[end - 1].strip():
+        end -= 1
+    return lines[:end]
+
+
+def insert_branch_pattern(text: str, pattern: str, kind: str = "idea") -> str | None:
+    """Config text with `pattern` added to [branches], or None if it is already
+    there. The entry goes immediately before the "*" fallback — and before the
+    comment block attached to it — so a specific pattern still wins the
+    first-match-wins lookup. Every other byte of the file is preserved, which
+    matters because the table is commented and tomllib cannot round-trip it.
+    """
+    newline = "\r\n" if "\r\n" in text else "\n"
+    lines = text.replace("\r\n", "\n").split("\n")
+    entry = f'"{pattern}"'
+
+    start = next(
+        (i for i, line in enumerate(lines) if line.strip() == "[branches]"), None
+    )
+    if start is None:
+        block = ["", "[branches]", f'{entry} = "{kind}"']
+        return newline.join([*_strip_trailing_blank(lines), *block, ""])
+
+    end = len(lines)
+    for idx in range(start + 1, len(lines)):
+        if _TABLE.match(lines[idx]):
+            end = idx
+            break
+
+    width = len(entry)
+    fallback = None
+    for idx in range(start + 1, end):
+        key = _entry_key(lines[idx])
+        if key is None:
+            continue
+        if key == pattern:
+            return None
+        width = max(width, len(f'"{key}"'))
+        if key == BRANCH_FALLBACK and fallback is None:
+            fallback = idx
+
+    at = end
+    if fallback is not None:
+        at = fallback
+        while at > start + 1 and lines[at - 1].lstrip().startswith("#"):
+            at -= 1
+    while at > start + 1 and not lines[at - 1].strip():
+        at -= 1
+
+    lines.insert(at, f'{entry:<{width}} = "{kind}"')
+    return newline.join(lines)

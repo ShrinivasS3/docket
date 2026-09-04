@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Reject any staged file larger than 50 MB.
+#
+# Large generated artifacts (suite_report.html, plot PNGs, checkpoints) belong
+# on disk, not in history — see .gitignore. If a file legitimately needs to be
+# this big, commit it with `git commit --no-verify`.
+
+LIMIT_MB=50
+LIMIT=$(( LIMIT_MB * 1024 * 1024 ))
+status=0
+
+# Handle the initial-commit case (no HEAD yet).
+if git rev-parse --verify HEAD >/dev/null 2>&1; then
+    against=HEAD
+else
+    against=$(git hash-object -t tree /dev/null)
+fi
+
+# -z plus `read -d ''` so paths containing spaces or newlines survive intact.
+while IFS= read -r -d '' path; do
+    [ -f "$path" ] || continue
+    size=$(wc -c < "$path" | tr -d ' ')
+    if [ "$size" -gt "$LIMIT" ]; then
+        if [ "$status" -eq 0 ]; then
+            echo "pre-commit: staged file(s) exceed ${LIMIT_MB} MB — commit rejected." >&2
+            echo >&2
+        fi
+        awk -v s="$size" -v p="$path" 'BEGIN{ printf "  %8.1f MB  %s\n", s/1048576, p }' >&2
+        status=1
+    fi
+done < <(git diff --cached --name-only -z --diff-filter=ACM "$against")
+
+if [ "$status" -ne 0 ]; then
+    echo >&2
+    echo "Add the path to .gitignore, or bypass with: git commit --no-verify" >&2
+fi
+
+exit $status

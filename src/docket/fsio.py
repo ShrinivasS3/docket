@@ -24,9 +24,24 @@ def write_text(cfg: Config, path: Path, content: str, *, dry_run: bool = False) 
         return False
     if dry_run:
         return True
+    _atomic_write(path, content)
+    return True
+
+
+def _atomic_write(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f".{path.name}.tmp")
     with open(tmp, "w", encoding="utf-8", newline="") as fh:
         fh.write(content)
     os.replace(tmp, path)
+
+
+def write_config(cfg: Config, content: str) -> bool:
+    """Rewrite config.toml itself. The roots guard cannot apply here — the config
+    lives outside all three roots by design — so the target is pinned to the file
+    the config was loaded from and nothing else is writable through this path.
+    """
+    if cfg.path.exists() and read_text(cfg.path) == content:
+        return False
+    _atomic_write(cfg.path, content)
     return True

@@ -1,0 +1,34 @@
+# OS / editor cruft
+.DS_Store
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# Secrets
+.env
+
+# Heavy, regenerable artifacts — the 50 MB pre-commit guard is the backstop,
+# not the policy. Outputs and checkpoints belong on disk, not in history.
+outputs/
+checkpoints/
+*.eqx
+*.npz
+*.npy
+*.pth
+*.ckpt
