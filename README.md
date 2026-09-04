@@ -17,11 +17,14 @@ Commands in v0: `capture`, `gotcha`, `recall`, `idea import`, `dash`, `list`,
 `docket recall "<words>"` searches the context vault and, read-only, the
 personal vault. Terms are stemmed (aggregation matches aggregate) and every
 note containing at least one term is a hit, ranked by how many terms it
-contains. Records come back as frontmatter only (id, status, title, scope,
-path), personal notes as the best-matching line plus one either side. Up to
-five hits print in full; more print one compact line each. Output is capped
-at 40 rendered lines and ends with a "N hits, showing M" line when cut;
-`--all` lifts the cap. `docket recall --full <id>` prints one record.
+contains. Results are tiered: every context record first, then personal
+notes, each under its own header, because a record is a verdict and a note is
+a mention. Records come back as frontmatter only (id, status, title, scope,
+path), personal notes as the best-matching line plus one either side and
+capped at five by default. Within a tier, up to five shown hits print in
+full; more print one compact line each. Output is bounded at 60 rendered
+lines, and any cut tier ends with a "N ..., showing M" line; `--all` lifts
+both caps. `docket recall --full <id>` prints one record.
 
 ## Blocking callout
 

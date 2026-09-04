@@ -12,10 +12,14 @@ path. The body is never printed; `--full <id>` prints one whole record.
 Personal-root notes are searched read-only when the configured root exists;
 a hit shows the best-matching line plus one line either side.
 
-Two formats: up to FULL_FORMAT_MAX_HITS hits print in full; more print one
-compact line each. The cap is on rendered lines, never on hits: over CAP
-lines the listing stops and a count line says how many were shown, so the
-result is never silent. `--all` bypasses the cap.
+Results are hard-tiered: every context record first, under its own header,
+then personal notes under theirs. A record matching one of two terms ranks
+above a note matching both: one is a verdict, the other a mention. Personal
+notes are capped at PERSONAL_CAP by default. Within a tier, up to
+FULL_FORMAT_MAX_HITS shown hits print in full; more print one compact line
+each. CAP bounds rendered lines as a backstop, never hits. Whenever a tier
+is cut, a count line says how many were shown, so the result is never
+silent. `--all` lifts both caps.
 
 This module has no write path: it imports no write helper and reads files
 through Path.read_text only. tests/test_recall.py asserts both.
@@ -31,7 +35,8 @@ from docket.config import Config, DocketError
 from docket.notes import Record, iter_markdown, load_records
 from docket.stem import stem
 
-CAP = 40
+CAP = 60  # rendered lines; room for two tiers of five full-format hits
+PERSONAL_CAP = 5
 FULL_FORMAT_MAX_HITS = 5
 LINE_WIDTH = 120
 COMPACT_WIDTH = 72
@@ -203,21 +208,34 @@ def run_recall(
     hits = find_hits(cfg, terms)
     if not hits:
         return f'no hits for "{query}"'
-    n_context = sum(1 for hit in hits if hit.root == "context")
+    context = [hit for hit in hits if hit.root == "context"]
+    personal = [hit for hit in hits if hit.root == "personal"]
     lines = [
-        f'{len(hits)} hit(s) for "{query}": {n_context} context record(s), '
-        f"{len(hits) - n_context} personal note(s)"
+        f'{len(hits)} hit(s) for "{query}": {len(context)} context record(s), '
+        f"{len(personal)} personal note(s)"
     ]
-    compact = len(hits) > FULL_FORMAT_MAX_HITS
-    shown = 0
-    for hit in hits:
-        block = [hit.compact] if compact else list(hit.full)
-        if not show_all and len(lines) + len(block) > cap - 1:
-            break
-        lines.extend(block)
-        shown += 1
-    if shown < len(hits):
-        lines.append(
-            f"{len(hits)} hits, showing {shown} — refine the query or use --all"
-        )
+    tiers = (
+        (context, "context records", None),
+        (personal, "personal notes", PERSONAL_CAP),
+    )
+    for tier_hits, noun, tier_cap in tiers:
+        if not tier_hits:
+            continue
+        lines.append(f"## {noun} ({len(tier_hits)})")
+        limit = len(tier_hits)
+        if tier_cap is not None and not show_all:
+            limit = min(tier_cap, limit)
+        compact = limit > FULL_FORMAT_MAX_HITS
+        shown = 0
+        for hit in tier_hits[:limit]:
+            block = [hit.compact] if compact else list(hit.full)
+            if not show_all and len(lines) + len(block) > cap - 1:
+                break
+            lines.extend(block)
+            shown += 1
+        if shown < len(tier_hits):
+            lines.append(
+                f"{len(tier_hits)} {noun}, showing {shown} — refine the query "
+                "or use --all"
+            )
     return "\n".join(lines)

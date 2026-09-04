@@ -52,7 +52,11 @@ def test_recall_context_hit_is_frontmatter_only(vault, cli):
     code, out, _ = cli("recall", "resonance")
     assert code == 0
     assert out.startswith('1 hit(s) for "resonance": 1 context record(s), 0 personal')
-    assert "[context] X0001 · Gotchas · TestProj · status: -\n" in out
+    assert (
+        "\n## context records (1)\n[context] X0001 · Gotchas · TestProj · status: -\n"
+        in out
+    )
+    assert "## personal notes" not in out
     assert "  Resonance trend appears where none exists" in out
     assert "  scope: oscillators, numerical-integration" in out
     assert "  gotcha-X0001-resonance-trend-appears-where-none-exists.md" in out
@@ -91,6 +95,25 @@ def test_recall_partial_match_ranks_below_full_match(vault, cli):
     assert "  > aggregation here" not in out  # only one line either side
 
 
+def test_recall_context_record_outranks_personal_note_with_more_terms(vault, cli):
+    _setup(vault, cli)
+    (vault.context / "idea-testproj-0007-temporal-masking.md").write_text(
+        '---\ncategories: "[[Ideas]]"\ntype: "[[TestProj]]"\n'
+        'status: "[[In Progress]]"\ndocket_id: testproj-0007\n'
+        "title: Temporal masking\n---\n\n# Temporal masking\n"
+    )
+    code, out, _ = cli("recall", "temporal aggregation")
+    assert code == 0
+    header, one_of_two, two_of_two, lecture = _order(
+        out,
+        "## context records (2)",
+        "[context] testproj-0007 · Ideas · TestProj · status: In Progress · matched 1/2",  # noqa: E501
+        "[context] testproj-0004 · Ideas · TestProj · status: Falsified · matched 2/2",
+        "## personal notes (1)\n[personal] Lecture notes.md:4 · matched 2/2",
+    )
+    assert header < two_of_two < one_of_two < lecture
+
+
 def test_recall_stems_plurals_and_suffixes(vault, cli):
     _setup(vault, cli)
     (vault.personal / "Verb.md").write_text("We aggregate windows here.\n")
@@ -108,31 +131,46 @@ def test_recall_ignores_stop_words(vault, cli):
     assert code == 2 and "at least one searchable word" in err
 
 
-def test_recall_compact_format_above_five_hits(vault, cli):
+def test_recall_personal_notes_capped_at_five_with_count_line(vault, cli):
     _setup(vault, cli)
     for i in range(6):
         (vault.personal / f"note{i:02d}.md").write_text(f"common word here {i}\n")
     code, out, _ = cli("recall", "common")
     lines = out.rstrip("\n").split("\n")
     assert code == 0 and lines[0].startswith('6 hit(s) for "common"')
-    assert lines[1:] == [
-        f"[personal] note{i:02d}.md:1 · common word here {i}" for i in range(6)
-    ]
-
-
-def test_recall_over_cap_lists_compactly_and_counts(vault, cli):
-    _setup(vault, cli)
-    for i in range(45):
-        (vault.personal / f"note{i:02d}.md").write_text(f"common word here {i}\n")
-    code, out, _ = cli("recall", "common")
-    lines = out.rstrip("\n").split("\n")
-    assert code == 0 and len(lines) == 40
-    assert lines[1].startswith("[personal] note00.md:1")
-    assert lines[-1] == "45 hits, showing 38 — refine the query or use --all"
+    assert lines[1] == "## personal notes (6)"
+    assert lines[2:4] == ["[personal] note00.md:1", "  > common word here 0"]  # full
+    assert "note05.md" not in out
+    assert lines[-1] == "6 personal notes, showing 5 — refine the query or use --all"
     code, out, _ = cli("recall", "common", "--all")
     lines = out.rstrip("\n").split("\n")
-    assert code == 0 and len(lines) == 46 and "showing" not in out
-    assert lines[-1].startswith("[personal] note44.md:1")
+    assert code == 0 and "showing" not in out
+    assert lines[2:] == [
+        f"[personal] note{i:02d}.md:1 · common word here {i}" for i in range(6)
+    ]  # six shown: compact
+
+
+def test_recall_line_cap_cuts_a_long_context_tier_with_count_line(vault, cli):
+    _setup(vault, cli)
+    for i in range(70):
+        (vault.context / f"idea-testproj-{i + 100:04d}-common.md").write_text(
+            '---\ncategories: "[[Ideas]]"\ntype: "[[TestProj]]"\n'
+            f"docket_id: testproj-{i + 100:04d}\ntitle: Common thing {i}\n---\n"
+        )
+    (vault.personal / "Mention.md").write_text("common here too\n")
+    code, out, _ = cli("recall", "common")
+    lines = out.rstrip("\n").split("\n")
+    assert code == 0 and lines[1] == "## context records (70)"
+    assert lines[2].startswith("[context] testproj-0100 · status: - · Common thing 0")
+    cut = lines.index("70 context records, showing 57 — refine the query or use --all")
+    assert cut == 59  # header + section line + 57 compact hits fill the 60-line cap
+    assert lines[cut + 1 :] == [
+        "## personal notes (1)",
+        "1 personal notes, showing 0 — refine the query or use --all",
+    ]
+    code, out, _ = cli("recall", "common", "--all")
+    lines = out.rstrip("\n").split("\n")
+    assert code == 0 and "showing" not in out and len(lines) == 1 + 1 + 70 + 1 + 2
 
 
 def test_recall_no_hits(vault, cli):
