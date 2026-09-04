@@ -86,7 +86,7 @@ def test_brief_bare_repo(vault, cli, capsys):
         "Branch:         no git repository",
         "Active idea:    none",
         "Last 3 runs:    no ledger",
-        "Falsified here: none",
+        "Falsified here: none marked (0 stubs)",
         "Gotchas:        none",
         "Deadline:       none",
     ]
@@ -103,7 +103,7 @@ def test_brief_ideas_but_no_ledger(vault, repo, cli):
     assert lines[2] == "Active idea:    0003 — Fresh one. Gate none set."
     assert lines[3] == "Last 3 runs:    no ledger"
     assert lines[4:] == [
-        "Falsified here: none",
+        "Falsified here: none marked (3 stubs)",  # the three imported ideas
         "Gotchas:        none",
         "Deadline:       none",
     ]

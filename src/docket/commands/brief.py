@@ -22,7 +22,7 @@ from docket import gitinfo
 from docket.blocking import registered_dirs
 from docket.commands.dash import deadline_status, load_deadlines
 from docket.config import Config, DocketError
-from docket.notes import Record, load_records, project_id, to_date, today
+from docket.notes import Record, is_stub, load_records, project_id, to_date, today
 from docket.stem import stem
 
 BUDGET_CHARS = 1000  # ~250 tokens at four characters per token
@@ -181,10 +181,13 @@ def runs_line(repo: Path, width: int) -> str:
 
 
 def falsified_line(records: list[Record], pid: str, width: int, limit: int) -> str:
-    items = [r for r in _ideas(records) if r.status == "Falsified"]
+    ideas = _ideas(records)
+    items = [r for r in ideas if r.status == "Falsified"]
     items.sort(key=lambda r: r.docket_id or "", reverse=True)
     if not items:
-        return "none"
+        # "none" would read as "nothing was ever refuted"; say what is unjudged
+        stubs = sum(1 for r in ideas if is_stub(r))
+        return f"none marked ({stubs} stubs)"
     shown = [f"{_short_id(r, pid)} {_clip(r.title, width)}" for r in items[:limit]]
     more = len(items) - limit
     return "; ".join(shown) + (f"; +{more} more" if more > 0 else "")
