@@ -31,6 +31,7 @@ LEDGERS = ("experiments/RESULTS.tsv", "docs/RESULTS.tsv", "RESULTS.tsv")
 LEDGER_COLUMNS = ("run_id", "run", "idea_id", "idea", "metric", "value")
 LABEL_WIDTH = 16
 _TOKEN = re.compile(r"[a-z0-9]+")
+_RULE = re.compile(r"^(-{3,}|\*{3,}|_{3,})$")  # horizontal rules are not prose
 
 # (claim chars, title chars, list items): tried in order until the text fits.
 _FITS = ((220, 48, 3), (120, 36, 2), (60, 24, 1))
@@ -65,7 +66,8 @@ def _short_id(record: Record, pid: str) -> str:
 
 def standing_claim(repo: Path, width: int) -> str | None:
     """First paragraph of NORTH_STAR.md: frontmatter, headings, comments,
-    blockquote asides and blank lines skipped; wrapped lines joined."""
+    blockquote asides, horizontal rules and blank lines skipped; wrapped
+    lines joined."""
     for rel in NORTH_STAR:
         path = repo / rel
         if not path.is_file():
@@ -78,7 +80,11 @@ def standing_claim(repo: Path, width: int) -> str | None:
         paragraph: list[str] = []
         for line in body.splitlines():
             stripped = line.strip()
-            if not stripped or stripped.startswith(("#", "<!--", ">")):
+            if (
+                not stripped
+                or stripped.startswith(("#", "<!--", ">"))
+                or _RULE.match(stripped)
+            ):
                 if paragraph:
                     break
                 continue

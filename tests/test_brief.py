@@ -30,6 +30,7 @@ def _populate(vault, repo, cli):
     (repo.path / "NORTH_STAR.md").write_text(
         "---\ntitle: north\n---\n# North star\n\n<!-- keep short -->\n"
         "> This supersedes the old north star; an aside, not the claim.\n\n"
+        "---\n\n## 1. The claim\n"
         "Grids emerge from prediction alone,\nnot from supervision.\n\n"
         "Second paragraph is not the claim.\n"
     )
