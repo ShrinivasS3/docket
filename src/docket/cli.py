@@ -10,6 +10,10 @@ from docket.config import DocketError, load_config
 
 
 def build_parser() -> argparse.ArgumentParser:
+    # Local: every command module is imported lazily, and this is the only
+    # thing the parser needs from one.
+    from docket.commands.idea import KIND_CHOICES
+
     parser = argparse.ArgumentParser(
         prog="docket", description="A lab notebook your coding agent reads."
     )
@@ -46,6 +50,24 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument(
         "--repo", required=True, help="directory name under the projects root"
     )
+    q.add_argument("--dry-run", action="store_true")
+
+    q = idea_sub.add_parser("new", help="file one idea against the branch it lives on")
+    q.add_argument(
+        "--branch", help="branch to seed from (default: the checked-out one)"
+    )
+    q.add_argument("--gate", help="the result that would refute this")
+    q.add_argument("--decide-by", metavar="YYYY-MM-DD", help="date to decide by")
+    q.add_argument("--parent", metavar="ID", help="docket_id this descends from")
+    q.add_argument(
+        "--inherits", metavar="G0001[,G0002]", help="finding ids this rests on"
+    )
+    q.add_argument(
+        "--from-scratch",
+        metavar="LINE",
+        help="promote this line of the Dashboard.md scratch block",
+    )
+    q.add_argument("--kind", choices=KIND_CHOICES)
     q.add_argument("--dry-run", action="store_true")
 
     p = sub.add_parser("dash", help="regenerate the focus block in Dashboard.md")
@@ -119,6 +141,23 @@ def dispatch(args: argparse.Namespace) -> int:
         print(run_recall(cfg, args.query, full=args.full, show_all=args.all))
         return 0
     if args.command == "idea":
+        if args.idea_command == "new":
+            from docket.commands.idea import run_idea_new
+
+            print(
+                run_idea_new(
+                    cfg,
+                    branch=args.branch,
+                    gate=args.gate,
+                    decide_by=args.decide_by,
+                    parent=args.parent,
+                    inherits=args.inherits,
+                    from_scratch=args.from_scratch,
+                    kind=args.kind,
+                    dry_run=args.dry_run,
+                )
+            )
+            return 0
         from docket.commands.idea import run_idea_import
 
         print(run_idea_import(cfg, args.repo, dry_run=args.dry_run))

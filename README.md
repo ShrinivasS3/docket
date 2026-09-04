@@ -11,8 +11,8 @@ Every write is idempotent, confined to the three configured roots, and never
 touches file content outside `<!-- docket:begin X -->` / `<!-- docket:end X -->`
 markers.
 
-Commands in v0: `init`, `capture`, `gotcha`, `recall`, `brief`, `idea import`,
-`dash`, `list`, `check`.
+Commands in v0: `init`, `capture`, `gotcha`, `recall`, `brief`, `idea new`,
+`idea import`, `dash`, `list`, `check`.
 
 ## docket init
 
@@ -91,6 +91,112 @@ branch Completed because its tip sits inside main, which is also what a branch
 that never received a commit looks like: the work may be sitting uncommitted
 in the tree. Only the checked-out branch's record can fire, since repo-wide
 dirt says nothing about a record whose branch is not checked out. Never a FAIL.
+
+## docket idea new
+
+    docket idea new [--branch <b>] [--gate <text>] [--decide-by <date>]
+                    [--parent <id>] [--inherits <G0004[,G0007]>]
+                    [--from-scratch <line>] [--kind exploratory|scaffold]
+
+Files one idea against the branch it lives on, run from inside the repo. The
+branch list is already a lab notebook — thirty-nine branches in four deliberate
+namespaces on PathJEPA alone — so `idea new` reads it rather than asking you to
+type it twice: **title, slug and namespace are seeded from the checked-out
+branch** (`--branch` overrides), and the branch is matched against `[branches]`
+the same way `idea import` matches it. A branch whose pattern says `gotcha` is
+refused and pointed at `docket gotcha`; `main` is refused outright, because an
+idea earns its own branch.
+
+**It refuses to finish without a gate.** Either `--gate "<the result that would
+refute this>"` for a hypothesis, or `--decide-by <YYYY-MM-DD>` for exploratory
+work whose question is when to stop rather than what would falsify it. Nothing
+is written on that path — no record, no dashboard edit. docket will not pick a
+gate for you: a gate it invented is not one you committed to, and `docket check`
+would wave it through on the day it was meant to bite. A re-run may leave both
+flags off once the record already carries a gate, but an `idea import` stub,
+whose gate is `""`, still has to supply one.
+
+`--decide-by` writes `gate_date`, the same field the Blocking callout watches,
+so an exploratory thread that quietly outlives its own deadline surfaces on the
+dashboard exactly like an overdue hypothesis.
+
+`--parent <id>` and `--inherits <G….>` are the forward links: an idea descends
+from another idea, and rests on cross-project findings. Both are stored as bare
+ids and are never given a stored backlink — Obsidian computes the inverse. An id
+naming nothing in the vault is reported as a `note:` rather than refused, since
+the parent may live in a project you have not imported yet.
+
+`--kind scaffold` marks phase, infra and repo-setup work: it lands code but
+tests no hypothesis, so `docket check` never counts it unjudged or gate-less.
+`--kind exploratory` is its counterpart, the work that takes a date instead.
+
+`--from-scratch "<line>"` promotes a thought out of the `Dashboard.md` scratch
+block. It names the line by its exact text, or by any substring that matches
+only one — two matches is an error listing both, because promoting the wrong
+line edits a file you were not looking at. The line's text is pulled into the
+record body as a dated quote, and the line itself is replaced in place with a
+three-line stub naming the record, the branch, and the gate:
+
+```markdown
+- 2026-09-03: try a nonlinear readout on frozen h_t → [[idea-pathjepa-0035-nonlinear-readout]]
+  - promoted 2026-09-04 · pathjepa-0035 · experiments/nonlinear-readout
+  - gate: a 2-layer MLP beats ridge-on-frame by >10% position MSE
+```
+
+Only the scratch block is read and only the scratch block is rewritten; every
+other byte of `Dashboard.md` is returned untouched. Promoting twice rewrites
+that stub rather than stacking a second one, and `docket dash`'s ` · Nd` ageing
+suffix is stripped before the line is matched or rebuilt.
+
+The record is written into the context vault with the frontmatter shape the
+vault already uses, and **is idempotent by `docket_id`**: a second run finds the
+record by its branch and edits it rather than adding one. Only the fields you
+supplied that run move, and the device that first wrote a record keeps the
+credit.
+
+**`idea new` files an idea; it does not adjudicate one.** A new record is
+`[[In Progress]]` because that is what filing one means, and on a re-run
+`status`, `merged` and `last_commit` are left exactly as they are — so no
+status, hand-set (`Falsified`, `Superseded`) or managed, is ever overwritten
+here. Branch-derived state is `docket idea import`'s, which reads whole branch
+histories; run it and a merged branch moves to `[[Completed]]` with the gate
+intact. The split is not tidiness: `idea new` rides `git checkout -b`, so the
+branch is typically seconds old with no commits of its own, which git cannot
+tell apart from a fast-forward-merged one. Deriving status here would file every
+new idea as already finished.
+
+```yaml
+categories: "[[Ideas]]"
+type: "[[PathJEPA]]"
+status: "[[In Progress]]"
+docket_id: pathjepa-0035
+title: Nonlinear readout
+branch: experiments/nonlinear-readout
+created: 2026-09-04
+last_commit: 2026-09-03
+merged: false
+gate: "a 2-layer MLP beats ridge-on-frame by >10% position MSE"
+gate_date: 2026-09-30
+verdict: pending
+parent: pathjepa-0034
+inherits: [G0004]
+device: Workstation
+attended: true
+```
+
+`device` and `attended` come from `[identity]` in `config.toml`, and record which
+machine wrote the note and whether a human was at the keyboard:
+
+```toml
+[identity]
+device   = "Workstation"
+attended = true
+```
+
+No `[identity]` table means neither field is written. A machine that has not been
+told who it is does not get to claim a device, and a stamped-on default would be
+indistinguishable from a real answer.
+
 
 ## Blocking callout
 

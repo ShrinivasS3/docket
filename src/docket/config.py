@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fnmatch
 import os
+import platform
 import re
 import tomllib
 from dataclasses import dataclass
@@ -35,6 +36,23 @@ class RecallConfig:
 
 
 @dataclass(frozen=True)
+class IdentityConfig:
+    """[identity]: which machine wrote a record, and whether a human was there.
+
+    No `[identity]` table means no `device` and no `attended` in the record. A
+    machine that has not been told who it is does not get to claim a device, and
+    a stamped-on default would be indistinguishable from a real answer.
+    """
+
+    device: str = ""
+    attended: bool = True
+
+    @property
+    def present(self) -> bool:
+        return bool(self.device)
+
+
+@dataclass(frozen=True)
 class Config:
     path: Path
     roots: dict[str, Path]
@@ -42,6 +60,7 @@ class Config:
     branches: tuple[tuple[str, str], ...]
     dash: DashConfig = DashConfig()
     recall: RecallConfig = RecallConfig()
+    identity: IdentityConfig = IdentityConfig()
 
     @property
     def projects(self) -> Path:
@@ -118,7 +137,21 @@ def load_config(explicit: str | Path | None = None) -> Config:
         branches=branches,
         dash=_dash_config(data.get("dash") or {}),
         recall=_recall_config(data.get("recall") or {}),
+        identity=_identity_config(data.get("identity")),
     )
+
+
+def _identity_config(raw: dict | None) -> IdentityConfig:
+    """Absent table -> an empty identity, which writes no fields at all."""
+    if not raw:
+        return IdentityConfig()
+    device = raw.get("device", platform.node().split(".")[0])
+    if not isinstance(device, str) or not device.strip():
+        raise DocketError("config [identity] device must be a non-empty string")
+    attended = raw.get("attended", True)
+    if not isinstance(attended, bool):
+        raise DocketError("config [identity] attended must be true or false")
+    return IdentityConfig(device=device.strip(), attended=attended)
 
 
 def _recall_config(raw: dict) -> RecallConfig:
