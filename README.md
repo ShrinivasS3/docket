@@ -24,7 +24,13 @@ path), personal notes as the best-matching line plus one either side and
 capped at five by default. Within a tier, up to five shown hits print in
 full; more print one compact line each. Output is bounded at 60 rendered
 lines, and any cut tier ends with a "N ..., showing M" line; `--all` lifts
-both caps. `docket recall --full <id>` prints one record.
+both caps. `docket recall --full <id>` prints one record. `[recall.aliases]`
+in config.toml maps a short form to its phrase (`sr = "successor
+representation"`) and recall expands both ways, so either spelling finds
+notes that use the other.
+
+`docket check` warns `<n> records are import stubs — title only, no gate`
+(never a FAIL: stubs are legitimate); `docket list --stubs` prints them.
 
 ## Blocking callout
 

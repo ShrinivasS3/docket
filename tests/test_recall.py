@@ -234,3 +234,47 @@ def test_recall_has_no_write_path_to_the_personal_root(vault, cli, monkeypatch):
         "open(",
     ):
         assert forbidden not in source, forbidden
+
+
+IDEA_SR = (
+    '---\ncategories: "[[Ideas]]"\ntype: "[[TestProj]]"\n'
+    'status: "[[Completed]]"\ndocket_id: testproj-0035\n'
+    "title: Sr map structure\n---\n\n# Sr map structure\n"
+)
+
+
+def _alias(vault):
+    vault.config.write_text(
+        vault.config.read_text()
+        + '\n[recall.aliases]\nsr = "successor representation"\n'
+    )
+
+
+def test_recall_alias_expands_both_ways(vault, cli):
+    _setup(vault, cli)
+    _alias(vault)
+    (vault.context / "idea-testproj-0035-sr-map-structure.md").write_text(IDEA_SR)
+    (vault.personal / "Notes SR.md").write_text(
+        "Intro.\nThe SR map predicts occupancy.\nTail.\n"
+    )
+    (vault.personal / "Long form.md").write_text(
+        "A successor representation of the grid.\n"
+    )
+    code, out, _ = cli("recall", "successor representation")
+    assert code == 0
+    assert (
+        "[context] testproj-0035 · Ideas · TestProj · status: Completed · matched 2/2"
+        in out
+    )
+    assert "[personal] Notes SR.md:2 · matched 2/2" in out
+    assert "  > The SR map predicts occupancy." in out
+    code, out, _ = cli("recall", "sr")
+    assert code == 0 and "testproj-0035" in out
+    assert "[personal] Long form.md:1" in out and "Notes SR.md:2" in out
+
+
+def test_recall_without_alias_config_does_not_expand(vault, cli):
+    _setup(vault, cli)
+    (vault.context / "idea-testproj-0035-sr-map-structure.md").write_text(IDEA_SR)
+    code, out, _ = cli("recall", "successor representation")
+    assert code == 0 and "testproj-0035" not in out

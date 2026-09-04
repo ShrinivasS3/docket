@@ -44,3 +44,10 @@ def test_list_filters(vault, repo, cli):
     ]
     _, out, _ = cli("list", "--project", "Nobody")
     assert out.strip() == "(no records)"
+
+
+def test_list_stubs(vault, repo, cli):
+    _seed(cli)
+    _, out, _ = cli("list", "--stubs")
+    ids = [line.split()[0] for line in out.strip().split("\n")[1:]]
+    assert ids == ["testproj-0001", "testproj-0002", "testproj-0003"]  # gotcha excluded

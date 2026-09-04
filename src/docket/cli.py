@@ -56,6 +56,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--category")
     p.add_argument("--status")
     p.add_argument("--project")
+    p.add_argument(
+        "--stubs",
+        action="store_true",
+        help="only import stubs: no gate, verdict pending",
+    )
 
     sub.add_parser("check", help="validate the context vault (exit 1 on problems)")
     return parser
@@ -104,7 +109,11 @@ def dispatch(args: argparse.Namespace) -> int:
 
         print(
             run_list(
-                cfg, category=args.category, status=args.status, project=args.project
+                cfg,
+                category=args.category,
+                status=args.status,
+                project=args.project,
+                stubs=args.stubs,
             )
         )
         return 0

@@ -7,7 +7,14 @@ from collections import defaultdict
 from docket import frontmatter as fm
 from docket.blocking import GATE, Blocking, idle_repos, repo_blocking, resolve_repos
 from docket.config import Config
-from docket.notes import Problem, anchor_index, load_records, overdue_gate, today
+from docket.notes import (
+    Problem,
+    anchor_index,
+    is_stub,
+    load_records,
+    overdue_gate,
+    today,
+)
 
 ANCHOR_KEYS = ("categories", "type", "status")
 
@@ -61,12 +68,22 @@ def find_warnings(cfg: Config) -> list[Blocking]:
     return sorted(found)
 
 
+def stub_warning(cfg: Config) -> str | None:
+    """Import stubs (verdict pending, no gate) are legitimate: a WARN, never a FAIL."""
+    records, _ = load_records(cfg.context)
+    n = sum(1 for record in records if is_stub(record))
+    return f"{n} records are import stubs — title only, no gate" if n else None
+
+
 def run_check(cfg: Config) -> tuple[str, int]:
     problems, count = find_problems(cfg)
-    warnings = find_warnings(cfg)
+    warnings = [w.message for w in find_warnings(cfg)]
+    stubs = stub_warning(cfg)
+    if stubs:
+        warnings.insert(0, stubs)
     idle = idle_repos(cfg, today())
     lines = [f"FAIL  {p.path.name}: {p.message}" for p in problems]
-    lines.extend(f"WARN  {w.message}" for w in warnings)
+    lines.extend(f"WARN  {w}" for w in warnings)
     lines.extend(f"IDLE  {name} — {days}d since last commit" for days, name in idle)
     extras = []
     if warnings:

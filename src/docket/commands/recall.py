@@ -5,7 +5,9 @@ Matching is by stemmed terms (see docket.stem): every note that contains at
 least one query term is a hit, scored by how many distinct terms it contains,
 and hits are sorted by score descending, so a note matching one of two terms
 still appears, below one matching both. Stop words and one-character tokens
-are ignored.
+are ignored. `[recall.aliases]` in config.toml (short = "phrase") expands
+both ways on the note side: a note saying "sr" counts as saying "successor
+representation", and one saying the phrase counts as saying "sr".
 
 Context records are reported by frontmatter only: id, status, title, scope,
 path. The body is never printed; `--full <id>` prints one whole record.
@@ -68,6 +70,9 @@ STOP_WORDS = frozenset(
 _TOKEN = re.compile(r"[a-z0-9]+")
 
 
+Alias = tuple[str, frozenset[str]]  # (short stem, phrase stems)
+
+
 @dataclass(frozen=True)
 class Hit:
     root: str  # "context" sorts before "personal"
@@ -83,6 +88,30 @@ def _tokens(text: str) -> list[str]:
 
 def _stems(text: str) -> set[str]:
     return {stem(tok) for tok in _tokens(text)}
+
+
+def _aliases(cfg: Config) -> list[Alias]:
+    pairs: list[Alias] = []
+    for short, phrase in cfg.recall.aliases:
+        short_stems = [stem(t) for t in _tokens(short)]
+        phrase_stems = frozenset(
+            stem(t) for t in _tokens(phrase) if len(t) >= 2 and t not in STOP_WORDS
+        )
+        if len(short_stems) == 1 and phrase_stems:
+            pairs.append((short_stems[0], phrase_stems))
+    return pairs
+
+
+def _expand(stems: set[str], aliases: list[Alias]) -> set[str]:
+    """Stems plus every alias equivalent: short form implies the phrase's stems,
+    the full phrase implies the short form."""
+    out = set(stems)
+    for short, phrase in aliases:
+        if short in stems:
+            out |= phrase
+        if phrase <= stems:
+            out.add(short)
+    return out
 
 
 def query_terms(query: str) -> list[str]:
@@ -108,8 +137,10 @@ def _score_tag(score: int, n_terms: int) -> str:
     return f" · matched {score}/{n_terms}" if n_terms > 1 else ""
 
 
-def _record_hit(record: Record, root: Path, terms: list[str]) -> Hit | None:
-    present = _stems(record.text)
+def _record_hit(
+    record: Record, root: Path, terms: list[str], aliases: list[Alias]
+) -> Hit | None:
+    present = _expand(_stems(record.text), aliases)
     score = sum(1 for t in terms if t in present)
     if score == 0:
         return None
@@ -131,25 +162,27 @@ def _record_hit(record: Record, root: Path, terms: list[str]) -> Hit | None:
     return Hit("context", ident.lower(), score, compact, tuple(full))
 
 
-def _best_line(terms: list[str], lines: list[str]) -> int | None:
+def _best_line(terms: list[str], lines: list[str], aliases: list[Alias]) -> int | None:
     """Index of the line holding the most query terms; earliest wins ties."""
     best, best_score = None, 0
     for idx, line in enumerate(lines):
-        present = _stems(line)
+        present = _expand(_stems(line), aliases)
         score = sum(1 for t in terms if t in present)
         if score > best_score:
             best, best_score = idx, score
     return best
 
 
-def _personal_hit(path: Path, root: Path, terms: list[str]) -> Hit | None:
+def _personal_hit(
+    path: Path, root: Path, terms: list[str], aliases: list[Alias]
+) -> Hit | None:
     text = path.read_text(encoding="utf-8", errors="replace")
-    present = _stems(path.stem + "\n" + text)
+    present = _expand(_stems(path.stem + "\n" + text), aliases)
     score = sum(1 for t in terms if t in present)
     if score == 0:
         return None
     lines = text.splitlines()
-    idx = _best_line(terms, lines)
+    idx = _best_line(terms, lines, aliases)
     if idx is None:  # only the file name matched
         shown, where = [line for line in lines if line.strip()][:1], ""
     else:
@@ -176,16 +209,17 @@ def _full_record(cfg: Config, docket_id: str) -> str:
 
 
 def find_hits(cfg: Config, terms: list[str]) -> list[Hit]:
+    aliases = _aliases(cfg)
     hits: list[Hit] = []
     records, _ = load_records(cfg.context)
     for record in records:
-        hit = _record_hit(record, cfg.context, terms)
+        hit = _record_hit(record, cfg.context, terms, aliases)
         if hit is not None:
             hits.append(hit)
     personal = cfg.roots.get("personal")
     if personal is not None and personal.is_dir():
         for path in iter_markdown(personal):
-            hit = _personal_hit(path, personal, terms)
+            hit = _personal_hit(path, personal, terms, aliases)
             if hit is not None:
                 hits.append(hit)
     hits.sort(key=lambda h: (-h.score, h.root, h.key))

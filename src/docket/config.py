@@ -27,12 +27,20 @@ class DashConfig:
 
 
 @dataclass(frozen=True)
+class RecallConfig:
+    """[recall.aliases]: short form -> phrase, expanded both ways by recall."""
+
+    aliases: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True)
 class Config:
     path: Path
     roots: dict[str, Path]
     dashboard: Path
     branches: tuple[tuple[str, str], ...]
     dash: DashConfig = DashConfig()
+    recall: RecallConfig = RecallConfig()
 
     @property
     def projects(self) -> Path:
@@ -108,7 +116,22 @@ def load_config(explicit: str | Path | None = None) -> Config:
         dashboard=dashboard,
         branches=branches,
         dash=_dash_config(data.get("dash") or {}),
+        recall=_recall_config(data.get("recall") or {}),
     )
+
+
+def _recall_config(raw: dict) -> RecallConfig:
+    aliases_raw = raw.get("aliases") or {}
+    if not isinstance(aliases_raw, dict):
+        raise DocketError("config [recall.aliases] must be a table of short = phrase")
+    aliases = []
+    for short, phrase in aliases_raw.items():
+        if not isinstance(phrase, str) or not phrase.strip() or not str(short).strip():
+            raise DocketError(
+                f"config [recall.aliases] {short!r} must map to a non-empty string"
+            )
+        aliases.append((str(short).strip(), phrase.strip()))
+    return RecallConfig(aliases=tuple(aliases))
 
 
 def _dash_config(raw: dict) -> DashConfig:

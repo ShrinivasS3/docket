@@ -126,6 +126,13 @@ def to_date(value: object) -> dt.date | None:
         return None
 
 
+def is_stub(record: Record) -> bool:
+    """An import stub: verdict still pending and no gate written yet."""
+    return fm.get_field(record.fields, "verdict") == "pending" and not fm.get_field(
+        record.fields, "gate"
+    )
+
+
 def overdue_gate(record: Record, now: dt.date) -> int | None:
     """Days since gate_date passed when verdict is still pending, else None."""
     gate_date = to_date(record.fields.get("gate_date"))

@@ -12,7 +12,10 @@ def _write(vault, name, text):
 def test_clean_vault_passes(vault, cli):
     _write(vault, "idea-testproj-0001-x.md", IDEA)
     code, out, _ = cli("check")
-    assert code == 0 and out == "docket check: ok (1 records)\n"
+    assert code == 0 and out == (
+        "WARN  1 records are import stubs — title only, no gate\n"
+        "docket check: ok (1 records), 1 warning(s)\n"
+    )
 
 
 def test_missing_anchor_fails(vault, cli):
@@ -110,7 +113,8 @@ def test_all_four_classes_reported_together(vault, cli):
     assert code == 1
     assert "missing anchor" in out and "malformed" in out
     assert "verdict pending" in out and "collides" in out
-    assert out.strip().endswith("problem(s) in 4 records")
+    assert "WARN  4 records are import stubs — title only, no gate" in out
+    assert out.strip().endswith("problem(s), 1 warning(s) in 4 records")
 
 
 def test_anchor_notes_and_readme_are_not_records(vault, cli):
@@ -145,7 +149,32 @@ def test_check_failures_and_warnings_together(vault, cli):
     code, out, _ = cli("check")
     assert code == 1
     assert "FAIL  idea-testproj-0001-x.md: gate_date 2026-08-30 passed 4d ago" in out
+    assert "WARN  1 records are import stubs — title only, no gate" in out
     assert "WARN  Local — no remote configured" in out
     assert out.strip().endswith(
-        "docket check: 1 problem(s), 1 warning(s), 1 idle in 1 records"
+        "docket check: 1 problem(s), 2 warning(s), 1 idle in 1 records"
     )
+
+
+def test_import_stubs_are_warned_never_failed(vault, cli):
+    _write(vault, "idea-testproj-0001-x.md", IDEA)  # gate "", verdict pending
+    _write(
+        vault,
+        "idea-testproj-0002-y.md",
+        IDEA.replace("testproj-0001", "testproj-0002").replace(
+            'gate: ""', "gate: grids emerge"
+        ),
+    )
+    code, out, _ = cli("check")
+    assert code == 0
+    assert out == (
+        "WARN  1 records are import stubs — title only, no gate\n"
+        "docket check: ok (2 records), 1 warning(s)\n"
+    )
+    _write(
+        vault,
+        "idea-testproj-0001-x.md",
+        IDEA.replace('gate: ""', "gate: something"),
+    )
+    code, out, _ = cli("check")
+    assert code == 0 and "stubs" not in out

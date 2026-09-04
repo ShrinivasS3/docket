@@ -49,3 +49,25 @@ def test_branch_match_returns_pattern_and_kind(vault):
     assert cfg.branch_match("fix/x") == ("fix/*", "gotcha")
     assert cfg.branch_match("bare-name") == ("*", "idea")
     assert cfg.branch_kind("bare-name") == "idea"  # still delegates
+
+
+def test_recall_aliases_default_empty(vault):
+    assert load_config(vault.config).recall.aliases == ()
+
+
+def test_recall_aliases_parse(vault):
+    vault.config.write_text(
+        vault.config.read_text()
+        + '\n[recall.aliases]\nsr = "successor representation"\n'
+        'hrf = "hemodynamic response function"\n'
+    )
+    assert load_config(vault.config).recall.aliases == (
+        ("sr", "successor representation"),
+        ("hrf", "hemodynamic response function"),
+    )
+
+
+def test_recall_aliases_reject_non_string(vault):
+    vault.config.write_text(vault.config.read_text() + "\n[recall.aliases]\nsr = 3\n")
+    with pytest.raises(DocketError, match="recall.aliases"):
+        load_config(vault.config)
