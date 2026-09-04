@@ -36,10 +36,33 @@ def load_deadlines(cfg: Config) -> list[dict]:
     return [entry for entry in data if isinstance(entry, dict)]
 
 
+DEADLINE_STATUSES = ("pending", "done", "slipped", "cancelled")
+
+
+def _deadline_status(entry: dict, venue: str) -> str:
+    raw = entry.get("status")
+    status = "pending" if raw is None else str(raw).strip().lower()
+    if status not in DEADLINE_STATUSES:
+        raise DocketError(
+            f"{DEADLINES_FILE}: {venue!r} has unknown status {raw!r} "
+            f"(expected one of: {', '.join(DEADLINE_STATUSES)})"
+        )
+    return status
+
+
 def _deadline_lines(entries: list[dict], now: dt.date) -> list[str]:
+    """One line per open (status: pending) deadline, in date order.
+
+    A pending deadline whose date has passed is NOT dropped: it renders as
+    OVERDUE, because a hard date that silently vanishes is the one thing this
+    list must never hide. Entries marked done, slipped or cancelled are closed
+    and never render, whatever their date.
+    """
     dated, undated = [], []
     for entry in entries:
         venue = str(entry.get("venue") or entry.get("name") or "?")
+        if _deadline_status(entry, venue) != "pending":
+            continue
         projects = entry.get("for") or []
         if not isinstance(projects, list):
             projects = [projects]
@@ -50,14 +73,11 @@ def _deadline_lines(entries: list[dict], now: dt.date) -> list[str]:
         if when is None:
             undated.append((venue, suffix))
             continue
-        days = (when - now).days
-        if days < 0:
-            continue
-        dated.append((days, venue, suffix))
-    lines = [
-        f"`{days}d` {venue}" + (f" · {suffix}" if suffix else "")
-        for days, venue, suffix in sorted(dated)
-    ]
+        dated.append(((when - now).days, venue, suffix))
+    lines = []
+    for days, venue, suffix in sorted(dated):
+        stamp = f"`OVERDUE {-days}d`" if days < 0 else f"`{days}d`"
+        lines.append(f"{stamp} {venue}" + (f" · {suffix}" if suffix else ""))
     lines.extend(
         f"`?` {venue}" + (f" · {suffix}" if suffix else "") + " · date unknown"
         for venue, suffix in undated

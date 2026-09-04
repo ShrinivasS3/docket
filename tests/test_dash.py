@@ -31,7 +31,7 @@ def _setup(vault, repo):
     (vault.context / "deadlines.yaml").write_text(
         "- venue: BrainBodyFM\n  date: 2026-09-05\n  for: [eeg-omega]\n"
         "- venue: COSYNE 2027\n  date: null\n  confirmed: false\n  for: [TestProj]\n"
-        "- venue: Yesterday Conf\n  date: 2026-09-02\n"
+        "- venue: Yesterday Conf\n  date: 2026-09-02\n  status: done\n"
         "- venue: ML4H\n  date: 2026-09-21\n  for: [stereopose3d]\n"
     )
     (vault.context / "idea-testproj-0009-overdue.md").write_text(OVERDUE)
@@ -68,7 +68,7 @@ def test_dash_md_regenerates_focus_and_ages_scratch(vault, repo, cli):
     assert "`2d` BrainBodyFM · eeg-omega" in focus
     assert "`18d` ML4H · stereopose3d" in focus
     assert "`?` COSYNE 2027 · TestProj · unconfirmed · date unknown" in focus
-    assert "Yesterday Conf" not in focus
+    assert "Yesterday Conf" not in focus  # past but done: closed, dropped
     assert "`6d` IdleProj" in focus
     assert "`5d` TestProj" in focus
     assert "generated 2026-09-03" in focus
@@ -143,6 +143,46 @@ def test_dash_stdout_only_writes_nothing(vault, repo, cli):
     before = snapshot(*vault.roots)
     code, out, _ = cli("dash")
     assert code == 0 and "> [!danger] Blocking" in out
+    assert snapshot(*vault.roots) == before
+
+
+def test_past_pending_deadline_renders_overdue(vault, repo, cli):
+    _setup(vault, repo)
+    (vault.context / "deadlines.yaml").write_text(
+        "- venue: Explicit Pending\n  date: 2026-08-31\n  status: pending\n"
+        "  confirmed: false\n  for: [TestProj]\n"
+        "- venue: Implicit Pending\n  date: 2026-09-02\n"  # no status: pending
+        "- venue: Done Past\n  date: 2026-09-01\n  status: done\n"
+        "- venue: Slipped Past\n  date: 2026-09-01\n  status: slipped\n"
+        "- venue: Cancelled Past\n  date: 2026-09-01\n  status: cancelled\n"
+        "- venue: Done Future\n  date: 2026-09-10\n  status: done\n"
+        "- venue: Cancelled Unknown\n  date: null\n  status: cancelled\n"
+        "- venue: Open Future\n  date: 2026-09-05\n  status: Pending\n"
+        "- venue: Open Unknown\n  date: null\n"
+    )
+    code, _, _ = cli("dash", "--md")
+    assert code == 0
+    focus = _focus(vault.dashboard.read_text())
+    nxt = focus.split("**Next up**")[1].split("**Idle**")[0].strip().split("\n")
+    assert nxt == [
+        "`OVERDUE 3d` Explicit Pending · TestProj · unconfirmed",
+        "`OVERDUE 1d` Implicit Pending",
+        "`2d` Open Future",
+        "`?` Open Unknown · date unknown",
+    ]
+    closed = ("Done Past", "Slipped Past", "Cancelled Past", "Done Future")
+    assert all(name not in focus for name in (*closed, "Cancelled Unknown"))
+
+
+def test_unknown_deadline_status_is_an_error(vault, repo, cli):
+    _setup(vault, repo)
+    (vault.context / "deadlines.yaml").write_text(
+        "- venue: Typo Conf\n  date: 2026-09-05\n  status: dne\n"
+    )
+    before = snapshot(*vault.roots)
+    code, out, err = cli("dash", "--md")
+    assert code != 0
+    assert "'Typo Conf' has unknown status 'dne'" in out + err
     assert snapshot(*vault.roots) == before
 
 
