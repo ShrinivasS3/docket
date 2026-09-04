@@ -44,7 +44,13 @@ correct, so running it on a hand-wired repo is a no-op rather than a rewrite:
 `docket init --check [<repo>]` reports only. It writes nothing — no file, no git
 mutation, no config edit — and prints one line per repo naming what is missing,
 exiting 1 if any repo is incomplete, so it can go in a hook. With no repo
-argument it checks every registered repo. Branches that reach only the `"*"`
+argument it checks every registered repo.
+
+A directory that holds other repos rather than being one — QuadisPD holds the
+app and its AWS infra — sets `container = true` in its `.docket.toml`. It is
+still registered, so records can be filed against it, but `--check` gives it no
+line at all and only counts it as skipped, and `init` refuses to wire it. An
+expected condition reported on every run is noise. Branches that reach only the `"*"`
 fallback are reported as a note rather than a gap, since a fallback branch is
 drift in the namespace rather than missing wiring.
 

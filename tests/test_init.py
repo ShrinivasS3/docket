@@ -486,3 +486,57 @@ def test_no_module_inlines_the_stanza():
     src = Path(init_mod.__file__).parent.parent
     for path in src.rglob("*.py"):
         assert first not in path.read_text(encoding="utf-8"), path
+
+
+# --- container repos ---------------------------------------------------------
+
+
+def container(vault, name: str = "Holder") -> Path:
+    """A registered directory that holds other repos and is not one itself."""
+    path = vault.projects / name
+    path.mkdir()
+    (path / ".docket.toml").write_text(f'project_id = "{name}"\ncontainer = true\n')
+    return path
+
+
+def test_check_skips_a_container(vault, repo, cli):
+    container(vault)
+    _, out, _ = cli("init", "--check")
+    assert "Holder" not in out
+
+
+def test_check_counts_the_containers_it_skipped(vault, repo, cli):
+    container(vault)
+    _, out, _ = cli("init", "--check")
+    assert out.strip().endswith("1 container skipped")
+
+
+def test_a_container_alone_leaves_nothing_incomplete(vault, repo, cli):
+    add_remote(repo, vault.root)
+    cli("init", "TestProj")
+    container(vault)
+    code, out, _ = cli("init", "--check")
+    assert code == 0
+    assert "1/1 repo wired, 1 container skipped" in out
+
+
+def test_two_containers_are_pluralised(vault, repo, cli):
+    container(vault, "Holder")
+    container(vault, "Other")
+    _, out, _ = cli("init", "--check")
+    assert "2 containers skipped" in out
+
+
+def test_init_refuses_to_wire_a_container(vault, cli):
+    container(vault)
+    code, _, err = cli("init", "Holder")
+    assert code == 2 and "container = true" in err
+    assert not (vault.projects / "Holder" / ".git").exists()
+
+
+def test_container_flag_needs_the_value_true(vault, repo, cli):
+    path = vault.projects / "Holder"
+    path.mkdir()
+    (path / ".docket.toml").write_text('project_id = "Holder"\ncontainer = false\n')
+    _, out, _ = cli("init", "--check")
+    assert "Holder — missing:" in out

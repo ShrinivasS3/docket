@@ -205,18 +205,30 @@ def next_number(records: list[Record], prefix: str) -> int:
     return highest + 1
 
 
+def repo_settings(repo: Path) -> dict:
+    """The repo's .docket.toml as a dict, empty when there is none."""
+    toml_path = repo / ".docket.toml"
+    if not toml_path.is_file():
+        return {}
+    try:
+        return tomllib.loads(toml_path.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as exc:
+        raise DocketError(f"{toml_path} is not valid TOML: {exc}") from exc
+
+
 def project_id(repo: Path) -> str:
     """`project_id` from the repo's .docket.toml, else the directory name."""
-    toml_path = repo / ".docket.toml"
-    if toml_path.is_file():
-        try:
-            data = tomllib.loads(toml_path.read_text(encoding="utf-8"))
-        except tomllib.TOMLDecodeError as exc:
-            raise DocketError(f"{toml_path} is not valid TOML: {exc}") from exc
-        value = data.get("project_id")
-        if value:
-            return str(value)
-    return repo.name
+    value = repo_settings(repo).get("project_id")
+    return str(value) if value else repo.name
+
+
+def is_container(repo: Path) -> bool:
+    """`container = true` marks a directory that holds other repos and is not
+    one itself, like QuadisPD. It is registered so its records have a project
+    to belong to, but it has no wiring of its own to be missing: reporting the
+    same expected gaps on every run is noise that trains the eye to skip the
+    report."""
+    return repo_settings(repo).get("container") is True
 
 
 def resolve_repo(cfg: Config, name: str) -> Path:

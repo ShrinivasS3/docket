@@ -25,7 +25,7 @@ from docket import gitinfo, templates
 from docket.blocking import registered_dirs
 from docket.config import Config, DocketError, insert_branch_pattern
 from docket.fsio import read_text, write_config, write_text
-from docket.notes import project_id
+from docket.notes import is_container, project_id
 
 LIMIT_MB = 50
 LIMIT_BYTES = LIMIT_MB * 1024 * 1024
@@ -511,6 +511,16 @@ def resolve_target(
     )
 
 
+def refuse_container(target: Target) -> None:
+    """A container holds other repos. `git init` inside one would make a repo
+    that swallows them, which is the opposite of what the flag records."""
+    if is_container(target.path):
+        raise DocketError(
+            f"{target.name} is marked container = true in .docket.toml; "
+            "wire the repos inside it instead"
+        )
+
+
 def run_steps(target: Target, *, write: bool) -> list[Outcome]:
     return [step(target, write=write) for step in STEPS]
 
@@ -526,7 +536,9 @@ def check_line(target: Target, outcomes: list[Outcome]) -> str:
 
 def check_repos(cfg: Config, name: str | None) -> tuple[str, int]:
     """Read-only. One line per repo naming what is missing; exit 1 if any repo
-    is incomplete, so this can go in a hook later."""
+    is incomplete, so this can go in a hook later. Containers get no line at
+    all — only a count, so the skip is visible without being an entry that
+    reads as a finding on every run."""
     if name:
         targets = [resolve_target(cfg, name)]
     else:
@@ -535,6 +547,8 @@ def check_repos(cfg: Config, name: str | None) -> tuple[str, int]:
             Target(cfg, d, d.resolve().relative_to(root).as_posix(), project_id(d))
             for d in registered_dirs(cfg)
         ]
+    containers = sum(1 for t in targets if is_container(t.path))
+    targets = [t for t in targets if not is_container(t.path)]
     lines, incomplete = [], 0
     for target in targets:
         outcomes = run_steps(target, write=False)
@@ -543,10 +557,12 @@ def check_repos(cfg: Config, name: str | None) -> tuple[str, int]:
         lines.append(check_line(target, outcomes))
     total = len(targets)
     noun = "repo" if total == 1 else "repos"
-    lines.append(
-        f"docket init --check: {total - incomplete}/{total} {noun} wired"
-        + (f", {incomplete} incomplete" if incomplete else "")
-    )
+    tail = f", {incomplete} incomplete" if incomplete else ""
+    if containers:
+        held = "container" if containers == 1 else "containers"
+        tail += f", {containers} {held} skipped"
+    summary = f"docket init --check: {total - incomplete}/{total} {noun} wired"
+    lines.append(summary + tail)
     return "\n".join(lines), (1 if incomplete else 0)
 
 
@@ -583,6 +599,7 @@ def run_init(
     target = resolve_target(
         cfg, name, namespace=namespace, override_id=project_id_override
     )
+    refuse_container(target)
     lines = [f"{target.name} ({target.project_id})"]
     outcomes = run_steps(target, write=True)
     for outcome in outcomes:
