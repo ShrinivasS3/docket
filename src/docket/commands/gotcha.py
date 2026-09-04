@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 
 from docket import frontmatter as fm
@@ -13,6 +14,26 @@ CATEGORY = "Gotchas"
 ID_PREFIX = "X"
 
 
+def normalize_note(note: str | None) -> str | None:
+    """Collapse whitespace inside paragraphs, keep paragraph breaks. None if empty."""
+    if note is None:
+        return None
+    paragraphs = [" ".join(p.split()) for p in re.split(r"\n\s*\n", note.strip())]
+    return "\n\n".join(p for p in paragraphs if p) or None
+
+
+def render_gotcha(fields: dict, note: str | None = None) -> str:
+    """Frontmatter plus the generated body: title, Cause, Fix, then an optional
+    Note section. The note lives in the body only."""
+    body = (
+        f"\n# {fields['symptom']}\n\n**Cause.** {fields['cause']}\n\n"
+        f"**Fix.** {fields['fix']}\n"
+    )
+    if note:
+        body += f"\n**Note.** {note}\n"
+    return fm.render(fields) + body
+
+
 def run_gotcha(
     cfg: Config,
     *,
@@ -21,9 +42,11 @@ def run_gotcha(
     fix: str,
     scope: str,
     project: str,
+    note: str | None = None,
     dry_run: bool = False,
 ) -> str:
     symptom, cause, fix = (" ".join(s.split()) for s in (symptom, cause, fix))
+    note = normalize_note(note)
     project = project.strip()
     if not symptom:
         raise DocketError("--symptom is required and cannot be empty")
@@ -61,8 +84,7 @@ def run_gotcha(
         "scope": scope_list,
         "created": today(),
     }
-    body = f"\n# {symptom}\n\n**Cause.** {cause}\n\n**Fix.** {fix}\n"
     path = vault / f"gotcha-{docket_id}-{slugify(symptom, 50)}.md"
     prefix = "[dry-run] " if dry_run else ""
-    write_text(cfg, path, fm.render(fields) + body, dry_run=dry_run)
+    write_text(cfg, path, render_gotcha(fields, note), dry_run=dry_run)
     return f"{prefix}created  {path.name}"

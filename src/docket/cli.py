@@ -30,7 +30,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--fix", required=True)
     p.add_argument("--scope", required=True, help="comma-separated scope tags")
     p.add_argument("--project", required=True, help="project anchor name")
+    p.add_argument("--note", help="free-text context appended as a body section")
     p.add_argument("--dry-run", action="store_true")
+
+    p = sub.add_parser(
+        "recall", help="search the context vault, and the personal vault read-only"
+    )
+    p.add_argument("query", nargs="?", help="words that must all appear")
+    p.add_argument("--full", metavar="ID", help="print one whole context record")
 
     p = sub.add_parser("idea", help="idea notes")
     idea_sub = p.add_subparsers(dest="idea_command", required=True)
@@ -71,9 +78,15 @@ def dispatch(args: argparse.Namespace) -> int:
                 fix=args.fix,
                 scope=args.scope,
                 project=args.project,
+                note=args.note,
                 dry_run=args.dry_run,
             )
         )
+        return 0
+    if args.command == "recall":
+        from docket.commands.recall import run_recall
+
+        print(run_recall(cfg, args.query, full=args.full))
         return 0
     if args.command == "idea":
         from docket.commands.idea import run_idea_import

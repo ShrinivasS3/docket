@@ -93,3 +93,24 @@ def test_gotcha_warns_on_missing_anchor(vault, cli):
     assert code == 0 and "Nowhere.md does not exist" in err
     code, out, _ = cli("check")
     assert code == 1 and "missing anchor [[Nowhere]]" in out
+
+
+def test_gotcha_note_appends_body_section_only(vault, cli):
+    note = "First  para   with spaces.\n\n\n  Second para.  "
+    code, out, _ = cli(*ARGS, "--note", note)
+    assert code == 0 and out.startswith("created")
+    path = vault.context / "gotcha-X0001-resonance-trend-appears-where-none-exists.md"
+    fields, body = fm.load(path.read_text())
+    assert "note" not in fields
+    assert body.endswith(
+        "**Fix.** Use RK4\n\n**Note.** First para with spaces.\n\nSecond para.\n"
+    )
+    code, out, _ = cli("check")
+    assert code == 0, out
+
+
+def test_gotcha_without_note_has_no_note_section(vault, cli):
+    cli(*ARGS)
+    path = vault.context / "gotcha-X0001-resonance-trend-appears-where-none-exists.md"
+    text = path.read_text()
+    assert "**Note.**" not in text and text.endswith("**Fix.** Use RK4\n")

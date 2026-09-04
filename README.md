@@ -11,7 +11,14 @@ Every write is idempotent, confined to the three configured roots, and never
 touches file content outside `<!-- docket:begin X -->` / `<!-- docket:end X -->`
 markers.
 
-Commands in v0: `capture`, `gotcha`, `idea import`, `dash`, `list`, `check`.
+Commands in v0: `capture`, `gotcha`, `recall`, `idea import`, `dash`, `list`,
+`check`.
+
+`docket recall "<words>"` searches the context vault and, read-only, the
+personal vault. Records come back as frontmatter only (id, status, title,
+scope, path), personal notes as the matched line plus one either side, and
+the output is capped: over the cap it reports counts and asks for a tighter
+query rather than truncating. `docket recall --full <id>` prints one record.
 
 ## Blocking callout
 
