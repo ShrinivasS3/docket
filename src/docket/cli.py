@@ -38,6 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("query", nargs="?", help="words that must all appear")
     p.add_argument("--full", metavar="ID", help="print one whole context record")
+    p.add_argument("--all", action="store_true", help="bypass the output line cap")
 
     p = sub.add_parser("idea", help="idea notes")
     idea_sub = p.add_subparsers(dest="idea_command", required=True)
@@ -86,7 +87,7 @@ def dispatch(args: argparse.Namespace) -> int:
     if args.command == "recall":
         from docket.commands.recall import run_recall
 
-        print(run_recall(cfg, args.query, full=args.full))
+        print(run_recall(cfg, args.query, full=args.full, show_all=args.all))
         return 0
     if args.command == "idea":
         from docket.commands.idea import run_idea_import

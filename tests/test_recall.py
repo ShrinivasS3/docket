@@ -43,12 +43,16 @@ def _setup(vault, cli):
     (vault.personal / "Other.md").write_text("Nothing relevant here.\n")
 
 
+def _order(out: str, *needles: str) -> list[int]:
+    return [out.index(n) for n in needles]
+
+
 def test_recall_context_hit_is_frontmatter_only(vault, cli):
     _setup(vault, cli)
     code, out, _ = cli("recall", "resonance")
     assert code == 0
     assert out.startswith('1 hit(s) for "resonance": 1 context record(s), 0 personal')
-    assert "[context] X0001 · Gotchas · TestProj · status: -" in out
+    assert "[context] X0001 · Gotchas · TestProj · status: -\n" in out
     assert "  Resonance trend appears where none exists" in out
     assert "  scope: oscillators, numerical-integration" in out
     assert "  gotcha-X0001-resonance-trend-appears-where-none-exists.md" in out
@@ -63,10 +67,9 @@ def test_recall_personal_hit_shows_matched_line_plus_one_each_side(vault, cli):
         '2 hit(s) for "temporal aggregation": 1 context record(s), 1 personal note(s)'
     )
     assert "[context] testproj-0004 · Ideas · TestProj · status: Falsified" in out
-    assert "  scope: temporal-aggregation, fmri" in out
-    assert "IDEABODY" not in out
-    tail = out.split("[personal] Lecture notes.md:4\n")[1].rstrip("\n").split("\n")
-    assert tail == [
+    assert " · matched 2/2" in out and "IDEABODY" not in out
+    tail = out.split("[personal] Lecture notes.md:4 · matched 2/2\n")[1]
+    assert tail.rstrip("\n").split("\n") == [
         "  > Intro line.",
         "  > Temporal aggregation of EEG windows was discussed here.",
         "  > Next line.",
@@ -74,30 +77,68 @@ def test_recall_personal_hit_shows_matched_line_plus_one_each_side(vault, cli):
     assert "Unrelated tail" not in out and "Other.md" not in out
 
 
-def test_recall_words_may_be_on_different_lines(vault, cli):
+def test_recall_partial_match_ranks_below_full_match(vault, cli):
     _setup(vault, cli)
+    (vault.personal / "Partial.md").write_text("Only aggregation is mentioned.\n")
     (vault.personal / "Split.md").write_text("temporal stuff\nmore\naggregation here\n")
-    code, out, _ = cli("recall", "Temporal AGGREGATION")
-    assert code == 0 and "[personal] Split.md:1" in out
+    code, out, _ = cli("recall", "temporal aggregation")
+    assert code == 0 and out.startswith('4 hit(s) for "temporal aggregation"')
+    assert "[personal] Partial.md:1 · matched 1/2" in out
+    assert "[personal] Split.md:1 · matched 2/2" in out
+    full, split, partial = _order(out, "testproj-0004", "Split.md", "Partial.md")
+    assert full < split < partial
     assert "  > temporal stuff\n  > more\n" in out
     assert "  > aggregation here" not in out  # only one line either side
 
 
-def test_recall_over_cap_reports_counts_and_shows_nothing(vault, cli):
+def test_recall_stems_plurals_and_suffixes(vault, cli):
     _setup(vault, cli)
-    for i in range(25):
+    (vault.personal / "Verb.md").write_text("We aggregate windows here.\n")
+    code, out, _ = cli("recall", "aggregation")
+    assert code == 0 and "[personal] Verb.md:1" in out
+    code, out, _ = cli("recall", "oscillator")
+    assert code == 0 and "[context] X0001" in out  # scope says oscillators
+
+
+def test_recall_ignores_stop_words(vault, cli):
+    _setup(vault, cli)
+    code, out, _ = cli("recall", "the aggregation of")
+    assert code == 0 and "matched 1/1" not in out and "testproj-0004" in out
+    code, _, err = cli("recall", "the of a")
+    assert code == 2 and "at least one searchable word" in err
+
+
+def test_recall_compact_format_above_five_hits(vault, cli):
+    _setup(vault, cli)
+    for i in range(6):
         (vault.personal / f"note{i:02d}.md").write_text(f"common word here {i}\n")
     code, out, _ = cli("recall", "common")
-    assert code == 0
-    assert out.startswith('25 hit(s) for "common": 0 context record(s), 25 personal')
-    assert "over the 40-line cap" in out and "tighten the query" in out
-    assert "note00.md" not in out and "  >" not in out
+    lines = out.rstrip("\n").split("\n")
+    assert code == 0 and lines[0].startswith('6 hit(s) for "common"')
+    assert lines[1:] == [
+        f"[personal] note{i:02d}.md:1 · common word here {i}" for i in range(6)
+    ]
+
+
+def test_recall_over_cap_lists_compactly_and_counts(vault, cli):
+    _setup(vault, cli)
+    for i in range(45):
+        (vault.personal / f"note{i:02d}.md").write_text(f"common word here {i}\n")
+    code, out, _ = cli("recall", "common")
+    lines = out.rstrip("\n").split("\n")
+    assert code == 0 and len(lines) == 40
+    assert lines[1].startswith("[personal] note00.md:1")
+    assert lines[-1] == "45 hits, showing 38 — refine the query or use --all"
+    code, out, _ = cli("recall", "common", "--all")
+    lines = out.rstrip("\n").split("\n")
+    assert code == 0 and len(lines) == 46 and "showing" not in out
+    assert lines[-1].startswith("[personal] note44.md:1")
 
 
 def test_recall_no_hits(vault, cli):
     _setup(vault, cli)
-    code, out, _ = cli("recall", "zzz-nothing-matches")
-    assert code == 0 and out.strip() == 'no hits for "zzz-nothing-matches"'
+    code, out, _ = cli("recall", "zzz qqq")
+    assert code == 0 and out.strip() == 'no hits for "zzz qqq"'
 
 
 def test_recall_full_prints_whole_record(vault, cli):
