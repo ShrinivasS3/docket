@@ -5,14 +5,18 @@ from __future__ import annotations
 from collections import defaultdict
 
 from docket import frontmatter as fm
+from docket import gitinfo
 from docket.blocking import GATE, Blocking, idle_repos, repo_blocking, resolve_repos
 from docket.config import Config
 from docket.notes import (
     Problem,
     anchor_index,
-    is_stub,
+    has_no_gate,
+    is_scaffold,
+    is_unjudged,
     load_records,
     overdue_gate,
+    project_id,
     today,
 )
 
@@ -68,19 +72,73 @@ def find_warnings(cfg: Config) -> list[Blocking]:
     return sorted(found)
 
 
-def stub_warning(cfg: Config) -> str | None:
-    """Import stubs (verdict pending, no gate) are legitimate: a WARN, never a FAIL."""
+def triage_warnings(cfg: Config) -> list[str]:
+    """Two classes of record that need a human, each a WARN and never a FAIL:
+    unjudged (Completed, verdict still pending) and no gate (In Progress, gate
+    empty). Records with `kind: scaffold` are in neither class.
+    """
     records, _ = load_records(cfg.context)
-    n = sum(1 for record in records if is_stub(record))
-    return f"{n} records are import stubs — title only, no gate" if n else None
+    unjudged = sum(1 for record in records if is_unjudged(record))
+    no_gate = sum(1 for record in records if has_no_gate(record))
+    lines = []
+    if unjudged:
+        lines.append(f"{unjudged} records unjudged — Completed, verdict still pending")
+    if no_gate:
+        lines.append(f"{no_gate} records have no gate — In Progress, gate empty")
+    return lines
+
+
+def _plural(count: int, noun: str) -> str:
+    return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
+
+
+def uncommitted_work_warnings(cfg: Config) -> list[str]:
+    """Completed records in a repo that has uncommitted paths. `idea import` marks
+    a record Completed when its branch tip is contained in main, which is also
+    what a branch that never received a commit looks like: the record's actual
+    work may be sitting uncommitted in the tree. One WARN per repo, naming the
+    record whose branch is checked out (the one the uncommitted paths most
+    plausibly belong to). Scaffold records are skipped. Never a FAIL.
+    """
+    records, _ = load_records(cfg.context)
+    lines = []
+    for repo in resolve_repos(cfg):
+        if not repo.has_git:
+            continue
+        pid = project_id(repo.path)
+        completed = [
+            r
+            for r in records
+            if r.status == "Completed"
+            and r.project == pid
+            and r.docket_id
+            and not is_scaffold(r)
+        ]
+        if not completed:
+            continue
+        paths = gitinfo.dirty_paths(repo.path)
+        if not paths:
+            continue
+        head = gitinfo.current_branch(repo.path)
+        owner = next(
+            (r for r in completed if fm.get_field(r.fields, "branch") == head), None
+        )
+        where = (
+            f"checked-out branch {head} belongs to {owner.docket_id}"
+            if owner is not None
+            else f"checked-out branch {head or '(detached)'} belongs to no record"
+        )
+        lines.append(
+            f"{repo.name} — {_plural(len(completed), 'Completed record')} while "
+            f"{_plural(len(paths), 'path')} uncommitted; {where}"
+        )
+    return lines
 
 
 def run_check(cfg: Config) -> tuple[str, int]:
     problems, count = find_problems(cfg)
     warnings = [w.message for w in find_warnings(cfg)]
-    stubs = stub_warning(cfg)
-    if stubs:
-        warnings.insert(0, stubs)
+    warnings = triage_warnings(cfg) + uncommitted_work_warnings(cfg) + warnings
     idle = idle_repos(cfg, today())
     lines = [f"FAIL  {p.path.name}: {p.message}" for p in problems]
     lines.extend(f"WARN  {w}" for w in warnings)

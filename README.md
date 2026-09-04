@@ -38,8 +38,18 @@ representation"`) and recall expands both ways on context records, so
 either spelling finds a record that uses the other; personal notes match on
 literal stems.
 
-`docket check` warns `<n> records are import stubs — title only, no gate`
-(never a FAIL: stubs are legitimate); `docket list --stubs` prints them.
+`docket check` triages ideas into two WARN classes, never a FAIL:
+`<n> records unjudged — Completed, verdict still pending` (the branch merged,
+nobody wrote a verdict) and `<n> records have no gate — In Progress, gate
+empty` (nothing says what would falsify it). A record with `kind: scaffold`
+in its frontmatter (phase, infra, repo-reset, env-setup work that lands code
+but tests nothing) is in neither class. Parked and hand-set statuses are in
+neither class either. `docket list --stubs` prints the two warned classes.
+A third WARN, `<repo> — <n> Completed records while <m> paths uncommitted;
+checked-out branch <b> belongs to <id>`, flags the case where `idea import`
+marked a branch Completed because its tip sits inside main, which is also what
+a branch that never received a commit looks like: the work may be sitting
+uncommitted in the tree. One line per repo, never a FAIL.
 
 ## Blocking callout
 

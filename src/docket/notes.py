@@ -126,11 +126,43 @@ def to_date(value: object) -> dt.date | None:
         return None
 
 
-def is_stub(record: Record) -> bool:
-    """An import stub: verdict still pending and no gate written yet."""
-    return fm.get_field(record.fields, "verdict") == "pending" and not fm.get_field(
-        record.fields, "gate"
+SCAFFOLD = "scaffold"
+
+
+def is_scaffold(record: Record) -> bool:
+    """`kind: scaffold` marks phase/infra/repo-setup records: work that lands code
+    but tests no hypothesis, so it is never unjudged and never needs a gate."""
+    return fm.get_field(record.fields, "kind") == SCAFFOLD
+
+
+def verdict_pending(record: Record) -> bool:
+    """No verdict beyond pending: the field is missing, empty, or `pending`."""
+    return fm.get_field(record.fields, "verdict") in (None, "", "pending")
+
+
+def is_unjudged(record: Record) -> bool:
+    """Completed (the branch merged) but nobody has written a verdict."""
+    return (
+        not is_scaffold(record)
+        and record.status == "Completed"
+        and verdict_pending(record)
     )
+
+
+def has_no_gate(record: Record) -> bool:
+    """In Progress with no gate written: nothing says what would falsify it."""
+    return (
+        not is_scaffold(record)
+        and record.status == "In Progress"
+        and not fm.get_field(record.fields, "gate")
+    )
+
+
+def is_stub(record: Record) -> bool:
+    """A record `docket check` warns about: unjudged or gate-less. Scaffold
+    records are neither. Parked, Falsified and other hand-set statuses are
+    never stubs."""
+    return is_unjudged(record) or has_no_gate(record)
 
 
 def overdue_gate(record: Record, now: dt.date) -> int | None:

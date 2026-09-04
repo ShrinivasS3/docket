@@ -50,4 +50,13 @@ def test_list_stubs(vault, repo, cli):
     _seed(cli)
     _, out, _ = cli("list", "--stubs")
     ids = [line.split()[0] for line in out.strip().split("\n")[1:]]
-    assert ids == ["testproj-0001", "testproj-0002", "testproj-0003"]  # gotcha excluded
+    # 0002 is Completed and unjudged, 0003 is In Progress with no gate;
+    # 0001 is Parked (neither class) and the gotcha has no verdict axis at all.
+    assert ids == ["testproj-0002", "testproj-0003"]
+    path = vault.context / "idea-testproj-0002-merged-one.md"
+    path.write_text(
+        path.read_text().replace("verdict: pending", "verdict: pending\nkind: scaffold")
+    )
+    _, out, _ = cli("list", "--stubs")
+    ids = [line.split()[0] for line in out.strip().split("\n")[1:]]
+    assert ids == ["testproj-0003"]

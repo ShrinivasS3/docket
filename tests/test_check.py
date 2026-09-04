@@ -13,7 +13,7 @@ def test_clean_vault_passes(vault, cli):
     _write(vault, "idea-testproj-0001-x.md", IDEA)
     code, out, _ = cli("check")
     assert code == 0 and out == (
-        "WARN  1 records are import stubs — title only, no gate\n"
+        "WARN  1 records have no gate — In Progress, gate empty\n"
         "docket check: ok (1 records), 1 warning(s)\n"
     )
 
@@ -113,7 +113,7 @@ def test_all_four_classes_reported_together(vault, cli):
     assert code == 1
     assert "missing anchor" in out and "malformed" in out
     assert "verdict pending" in out and "collides" in out
-    assert "WARN  4 records are import stubs — title only, no gate" in out
+    assert "WARN  4 records have no gate — In Progress, gate empty" in out
     assert out.strip().endswith("problem(s), 1 warning(s) in 4 records")
 
 
@@ -149,15 +149,15 @@ def test_check_failures_and_warnings_together(vault, cli):
     code, out, _ = cli("check")
     assert code == 1
     assert "FAIL  idea-testproj-0001-x.md: gate_date 2026-08-30 passed 4d ago" in out
-    assert "WARN  1 records are import stubs — title only, no gate" in out
+    assert "WARN  1 records have no gate — In Progress, gate empty" in out
     assert "WARN  Local — no remote configured" in out
     assert out.strip().endswith(
         "docket check: 1 problem(s), 2 warning(s), 1 idle in 1 records"
     )
 
 
-def test_import_stubs_are_warned_never_failed(vault, cli):
-    _write(vault, "idea-testproj-0001-x.md", IDEA)  # gate "", verdict pending
+def test_no_gate_is_warned_never_failed(vault, cli):
+    _write(vault, "idea-testproj-0001-x.md", IDEA)  # In Progress, gate ""
     _write(
         vault,
         "idea-testproj-0002-y.md",
@@ -168,7 +168,7 @@ def test_import_stubs_are_warned_never_failed(vault, cli):
     code, out, _ = cli("check")
     assert code == 0
     assert out == (
-        "WARN  1 records are import stubs — title only, no gate\n"
+        "WARN  1 records have no gate — In Progress, gate empty\n"
         "docket check: ok (2 records), 1 warning(s)\n"
     )
     _write(
@@ -177,4 +177,103 @@ def test_import_stubs_are_warned_never_failed(vault, cli):
         IDEA.replace('gate: ""', "gate: something"),
     )
     code, out, _ = cli("check")
-    assert code == 0 and "stubs" not in out
+    assert code == 0 and "no gate" not in out and "unjudged" not in out
+
+
+COMPLETED = IDEA.replace("[[In Progress]]", "[[Completed]]").replace(
+    "merged: false", "merged: true"
+)
+
+
+def test_unjudged_is_completed_with_verdict_pending(vault, cli):
+    _write(vault, "idea-testproj-0001-x.md", COMPLETED)  # verdict pending, gate ""
+    code, out, _ = cli("check")
+    assert code == 0
+    assert out == (
+        "WARN  1 records unjudged — Completed, verdict still pending\n"
+        "docket check: ok (1 records), 1 warning(s)\n"
+    )
+    # A gate alone does not judge a Completed record; a verdict does.
+    _write(vault, "idea-testproj-0001-x.md", COMPLETED.replace('gate: ""', "gate: g"))
+    assert "1 records unjudged" in cli("check")[1]
+    _write(
+        vault,
+        "idea-testproj-0001-x.md",
+        COMPLETED.replace("verdict: pending", "verdict: refutes"),
+    )
+    code, out, _ = cli("check")
+    assert code == 0 and "unjudged" not in out and "no gate" not in out
+    # A missing verdict field counts as pending.
+    _write(
+        vault, "idea-testproj-0001-x.md", COMPLETED.replace("verdict: pending\n", "")
+    )
+    assert "1 records unjudged" in cli("check")[1]
+
+
+def test_both_classes_reported_unjudged_first(vault, cli):
+    _write(vault, "idea-testproj-0001-x.md", IDEA)
+    _write(vault, "idea-testproj-0002-y.md", COMPLETED.replace("0001", "0002"))
+    _write(vault, "idea-testproj-0003-z.md", COMPLETED.replace("0001", "0003"))
+    code, out, _ = cli("check")
+    assert code == 0
+    assert out == (
+        "WARN  2 records unjudged — Completed, verdict still pending\n"
+        "WARN  1 records have no gate — In Progress, gate empty\n"
+        "docket check: ok (3 records), 2 warning(s)\n"
+    )
+
+
+def test_scaffold_kind_is_in_neither_class(vault, cli):
+    _write(
+        vault,
+        "idea-testproj-0001-x.md",
+        IDEA.replace("verdict: pending", "verdict: pending\nkind: scaffold"),
+    )
+    _write(
+        vault,
+        "idea-testproj-0002-y.md",
+        COMPLETED.replace("0001", "0002").replace(
+            "verdict: pending", "verdict: pending\nkind: scaffold"
+        ),
+    )
+    code, out, _ = cli("check")
+    assert code == 0 and out == "docket check: ok (2 records)\n"
+
+
+def test_parked_and_hand_set_statuses_are_in_neither_class(vault, cli):
+    _write(
+        vault, "idea-testproj-0001-x.md", IDEA.replace("[[In Progress]]", "[[Parked]]")
+    )
+    _write(
+        vault,
+        "idea-testproj-0002-y.md",
+        IDEA.replace("0001", "0002").replace("[[In Progress]]", "[[Falsified]]"),
+    )
+    code, out, _ = cli("check")
+    assert code == 0 and out == "docket check: ok (2 records)\n"
+
+
+def test_completed_records_in_dirty_repo_are_warned(vault, repo, cli):
+    cli("idea", "import", "--repo", "TestProj")  # 0002 Completed (merged-one)
+    code, out, _ = cli("check")
+    assert code == 0 and "uncommitted;" not in out  # clean tree: nothing to say
+    (repo.path / "scratch.txt").write_text("not committed")
+    code, out, _ = cli("check")
+    assert code == 0
+    assert (
+        "WARN  TestProj — 1 Completed record while 1 path uncommitted; "
+        "checked-out branch main belongs to no record" in out
+    )
+    repo("checkout", "-q", "experiments/merged-one")
+    code, out, _ = cli("check")
+    assert (
+        "WARN  TestProj — 1 Completed record while 1 path uncommitted; "
+        "checked-out branch experiments/merged-one belongs to testproj-0002" in out
+    )
+    # A scaffold record is not missed research work.
+    path = vault.context / "idea-testproj-0002-merged-one.md"
+    path.write_text(
+        path.read_text().replace("verdict: pending", "verdict: pending\nkind: scaffold")
+    )
+    code, out, _ = cli("check")
+    assert code == 0 and "uncommitted;" not in out

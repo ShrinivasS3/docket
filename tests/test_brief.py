@@ -103,7 +103,8 @@ def test_brief_ideas_but_no_ledger(vault, repo, cli):
     assert lines[2] == "Active idea:    0003 — Fresh one. Gate none set."
     assert lines[3] == "Last 3 runs:    no ledger"
     assert lines[4:] == [
-        "Falsified here: none marked (3 stubs)",  # the three imported ideas
+        # 0002 is unjudged, 0003 has no gate; 0001 is Parked (neither)
+        "Falsified here: none marked (2 stubs)",
         "Gotchas:        none",
         "Deadline:       none",
     ]

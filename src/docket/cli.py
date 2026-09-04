@@ -59,7 +59,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--stubs",
         action="store_true",
-        help="only import stubs: no gate, verdict pending",
+        help=(
+            "only records docket check warns about: unjudged (Completed, verdict "
+            "pending) or no gate (In Progress); kind: scaffold is excluded"
+        ),
     )
 
     sub.add_parser("check", help="validate the context vault (exit 1 on problems)")

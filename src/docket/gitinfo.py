@@ -84,6 +84,15 @@ def last_commit_date(repo: Path) -> dt.date | None:
         return None
 
 
+def current_branch(repo: Path) -> str | None:
+    """Name of the checked-out branch, or None when HEAD is detached or unborn."""
+    try:
+        name = run_git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip()
+    except DocketError:
+        return None
+    return None if name in ("", "HEAD") else name
+
+
 def has_remote(repo: Path) -> bool:
     return bool(run_git(repo, "remote").strip())
 
