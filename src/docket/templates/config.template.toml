@@ -1,0 +1,74 @@
+# docket config template — the committed half of ~/.docket/config.toml.
+#
+# Copy to ~/.docket/config.toml on a new machine and replace every <PLACEHOLDER>.
+# Everything that is NOT a placeholder is portable and should be identical on
+# every machine: `docket config check` reports any place the live config and
+# this template disagree, because a branch pattern or a recall alias added
+# locally and never committed is exactly the kind of thing that is lost when a
+# machine is rebuilt.
+#
+# Machine-specific, hence placeholdered: the three roots, the dashboard target,
+# and identity.device. `identity.attended` is machine-specific too — it is a
+# real boolean, so it cannot carry a placeholder; it is committed as the common
+# value and excluded from the drift check.
+
+[roots]
+projects = "<PROJECTS_ROOT>"   # mac: ~/Developer/projects
+context  = "<CONTEXT_ROOT>"    # mac: ~/Developer/context
+personal = "<PERSONAL_ROOT>"   # mac: ~/OneDrive/Documents/MineHQ
+
+[dashboard]
+# Omit the whole table to default to <personal>/Dashboard.md.
+target = "<DASHBOARD_TARGET>"  # mac: ~/OneDrive/Documents/MineHQ/Dashboard.md
+
+[branches]
+# Namespaced patterns carry meaning — keep them first, most specific wins.
+"experiments/*"  = "idea"
+"diagnostics/*"  = "idea"
+"feat/*"         = "idea"
+"phase-*"        = "idea"
+"redesign/*"     = "idea"
+"fix/*"          = "gotcha"
+"phase[0-9A-Za-z]*"  = "idea"     # OscJEPA rung ladder
+"feature/*"          = "idea"     # AspectGraph
+"docs/*"            = "idea"
+# Fallback. Many branches are bare-named (mcgurk-ydonn,
+# eeg-compression-pipeline, synergy-pilot, discretization-head).
+# Without this they are silently skipped and the log looks
+# complete while missing half the work.
+"*"              = "idea"
+
+[recall.aliases]
+# short form = phrase. `docket recall` expands both ways on the note side, so a
+# query for either spelling finds notes that use the other. Keys match as whole
+# tokens only.
+sr   = "successor representation"
+hrf  = "hemodynamic response function"
+som  = "self-organizing map"
+ce   = "cross-entropy"
+dog  = "difference of gaussians"
+jepa = "joint-embedding predictive architecture"
+
+# [dash]
+# Blocking-callout thresholds. Omitted here because the defaults are the live
+# values; uncomment and they become portable config like everything else, and
+# `docket config check` will hold the machines to them.
+# unpushed_days = 3
+# stale_days    = 7
+# max_blocking  = 5
+# max_idle      = 5
+
+[identity]
+# Stamped onto every record docket writes, and onto the commit trailers its
+# launchd agents emit: which machine role wrote it, and whether a human was at
+# the keyboard.
+#
+# device is a ROLE, never a hostname — mac, cnslab, hermes. A hostname stops
+# being comparable the moment the machine is replaced or renamed, and the
+# question a record has to answer two years later is which role wrote it.
+#
+# attended is the default for this machine; `--unattended` always overrides it,
+# and the two autocommit agents pass it. No [identity] table means neither
+# field is written at all. A scheduler-only machine sets attended = false.
+device   = "<ROLE>"            # mac | cnslab | hermes
+attended = true

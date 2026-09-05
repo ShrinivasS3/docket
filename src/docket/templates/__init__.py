@@ -33,3 +33,10 @@ def gitignore() -> str:
 def pre_commit_hook() -> str:
     """The 50 MB staged-file guard installed at .githooks/pre-commit."""
     return load("pre-commit")
+
+
+def config_template() -> str:
+    """The committed half of ~/.docket/config.toml, with <PLACEHOLDER> for
+    every machine-specific value. `docket config check` diffs the live config
+    against it."""
+    return load("config.template.toml")

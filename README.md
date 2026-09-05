@@ -12,7 +12,7 @@ touches file content outside `<!-- docket:begin X -->` / `<!-- docket:end X -->`
 markers.
 
 Commands in v0: `init`, `capture`, `gotcha`, `recall`, `brief`, `idea new`,
-`idea import`, `dash`, `list`, `check`, `identity`.
+`idea import`, `dash`, `list`, `check`, `identity`, `config check`.
 
 ## docket init
 
@@ -268,6 +268,48 @@ git -C "$VAULT" commit -q "${msg[@]}"
 trailers and git then refuses the block. A failed or missing `docket` must
 never stop the vault being committed, which is what the `|| trailers=""` is
 for.
+
+
+## docket config check
+
+`~/.docket/config.toml` is the only file in the system that lives in neither a
+repo nor a vault. Nothing carries it to a new machine and nothing notices when
+it is lost — and most of it is portable. `src/docket/templates/config.template.toml`
+is the committed half: copy it to `~/.docket/config.toml` on a new machine and
+fill in every `<PLACEHOLDER>`.
+
+```
+docket config check
+```
+
+reports every place the live config and the template disagree, and **exits 1 on
+any drift**, so it can gate a push. A branch pattern or a recall alias added
+locally and never committed is exactly what a rebuild would silently drop:
+
+```
+DRIFT  branches  "spike/*" = "idea"  — live only, never committed; a rebuild would lose it
+DRIFT  recall.aliases.som2 = "kohonen map"  — live only, never committed; a rebuild would lose it
+DRIFT  dash.stale_days = 30  — live only, never committed; a rebuild would lose it
+```
+
+It reports the other directions too — in the template but missing locally, a
+changed value, a whole new section — and **`[branches]` is compared in order**,
+because the table is first-match-wins: the same patterns in a different
+sequence are a different config, and a reorder that read as clean would be a
+silent behaviour change.
+
+**Machine-specific values are never compared**: the three roots, the dashboard
+target, `identity.device` and `identity.attended`. They differ legitimately on
+every machine, and a report full of differences nobody can act on is a report
+nobody reads. `device` and the paths carry `<PLACEHOLDER>` values in the
+template, and a test fails if a real path or role is ever committed there.
+`attended` is a boolean and cannot hold a placeholder, so it is committed as the
+common value and excluded by name.
+
+Comparison is on parsed TOML, not text, because the template is hand-maintained
+and its comments are half its value. A commented-out block — `[dash]` is one —
+is therefore never drift, and documents a knob without binding the machines to
+it until someone uncomments it.
 
 
 ## Blocking callout
