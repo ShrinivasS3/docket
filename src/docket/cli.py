@@ -118,6 +118,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("check", help="validate the context vault (exit 1 on problems)")
 
+    p = sub.add_parser("config", help="the live config against the template")
+    config_sub = p.add_subparsers(dest="config_command", required=True)
+    config_sub.add_parser(
+        "check",
+        help="report drift between ~/.docket/config.toml and the committed "
+        "template; exit 1 on any drift",
+    )
+
     p = sub.add_parser("init", help="wire a repo into docket; --check only reports")
     p.add_argument(
         "repo",
@@ -260,6 +268,12 @@ def dispatch(args: argparse.Namespace) -> int:
             namespace=args.namespace,
             project_id_override=args.project_id,
         )
+        print(text)
+        return code
+    if args.command == "config":
+        from docket.commands.config import run_config_check
+
+        text, code = run_config_check(cfg)
         print(text)
         return code
     if args.command == "check":
